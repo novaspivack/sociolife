@@ -2,6 +2,8 @@
 
 SocioLife is an advanced artificial life simulation exploring emergent social behaviors, tribal dynamics, economic systems, warfare, diplomacy, and technological evolution in a complex multi-agent ecosystem.
 
+SocioLife is written in javascript and runs in your browser. It's graphics and compute intensive, so it's best run on a modern multicore PC.
+
 This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. You are free to share and adapt this work for non-commercial purposes with proper attribution to Nova Spivack (www.novaspivack.com).
 
 ## Game Mechanics
