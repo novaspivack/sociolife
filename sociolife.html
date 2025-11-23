@@ -10758,14 +10758,30 @@
                 if (this.actionMode && this.actionMode.startsWith('agent-')) {
                     let agentType = this.actionMode.replace('agent-', '');
                     
-                    // Get a random existing tribe
-                    let existingTribes = Object.keys(this.tribes.tribes).map(id => parseInt(id)).filter(id => id !== -1);
-                    if (existingTribes.length === 0) {
-                        this.setStatusMessage(`⚠️ No existing tribes to join!`, 300);
-                        this.setTool(null);
-                        return;
+                    // Check if click is on a nest - if so, use that nest's tribe
+                    let clickedNest = null;
+                    for (let nest of this.tribes.nests) {
+                        let dist = Vector.dist(new Vector(x, y), nest.pos);
+                        if (dist < nest.radius) {
+                            clickedNest = nest;
+                            break;
+                        }
                     }
-                    let randomTribeId = existingTribes[Math.floor(Math.random() * existingTribes.length)];
+                    
+                    let targetTribeId;
+                    if (clickedNest) {
+                        // Use the nest's tribe
+                        targetTribeId = clickedNest.tribeId;
+                    } else {
+                        // Randomly choose a tribe
+                        let existingTribes = Object.keys(this.tribes.tribes).map(id => parseInt(id)).filter(id => id !== -1);
+                        if (existingTribes.length === 0) {
+                            this.setStatusMessage(`⚠️ No existing tribes to join!`, 300);
+                            this.setTool(null);
+                            return;
+                        }
+                        targetTribeId = existingTribes[Math.floor(Math.random() * existingTribes.length)];
+                    }
                     
                     // Spawn 15 agents of the specified type
                     for (let i = 0; i < 15; i++) {
@@ -10773,7 +10789,7 @@
                         let offset = 20 + Math.random() * 15;
                         let spawnX = x + Math.cos(angle) * offset;
                         let spawnY = y + Math.sin(angle) * offset;
-                        let agent = new Agent(spawnX, spawnY, null, null, randomTribeId);
+                        let agent = new Agent(spawnX, spawnY, null, null, targetTribeId);
                         agent.role = agentType;
                         agent.assignColor();
                         agent.age = Math.random() * CONFIG.adultAge;
@@ -10803,8 +10819,11 @@
                         this.agents.push(agent);
                     }
                     
-                    let tribeName = this.tribes.tribes[randomTribeId]?.name || `Tribe ${randomTribeId}`;
-                    this.setStatusMessage(`👥 PLACED 15 ${agentType}s joining ${tribeName} at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
+                    let tribeName = this.tribes.tribes[targetTribeId]?.name || `Tribe ${targetTribeId}`;
+                    let placementMsg = clickedNest ? 
+                        `👥 PLACED 15 ${agentType}s joining ${tribeName} (nest) at (${Math.floor(x)}, ${Math.floor(y)})` :
+                        `👥 PLACED 15 ${agentType}s joining ${tribeName} (random) at (${Math.floor(x)}, ${Math.floor(y)})`;
+                    this.setStatusMessage(placementMsg, 300);
                     this.setTool(null);
                     return;
                 }
