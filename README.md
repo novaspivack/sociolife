@@ -4,7 +4,11 @@ SocioLife is an advanced artificial life simulation exploring emergent social be
 
 SocioLife is written in javascript and runs in your browser. It's graphics and compute intensive, so it's best run on a modern multicore PC.
 
-This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. You are free to share and adapt this work for non-commercial purposes with proper attribution to Nova Spivack (www.novaspivack.com).
+Read more here: https://www.novaspivack.com/science/sociolife-a-socio-economic-artificial-life-sim-that-runs-in-your-browser
+
+Run it here: https://www.novaspivack.com/wp-content/uploads/2025/11/SocioLife.html
+
+This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. You are free to share and adapt this work for non-commercial purposes with proper attribution to Nova Spivack (www.novaspivack.com). (If you adapt it please let the author know :)
 
 ## Game Mechanics
 
