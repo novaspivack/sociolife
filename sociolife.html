@@ -256,6 +256,12 @@
                         <li>All resource types convert to useful value (energy or wealth) for agents, tribes, and nests</li>
                     </ul>
                     
+                    <p class="font-bold text-blue-300 mt-4">Links</p>
+                    <p class="text-xs">
+                        Website: <a href="https://www.novaspivack.com" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline">www.novaspivack.com</a><br>
+                        GitHub: <a href="https://github.com/novaspivack" target="_blank" class="text-cyan-400 hover:text-cyan-300 underline">github.com/novaspivack</a>
+                    </p>
+                    
                     <p class="font-bold text-blue-300 mt-4">License</p>
                     <p class="text-xs">This work is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License. You are free to share and adapt this work for non-commercial purposes with proper attribution to Nova Spivack.</p>
                     
@@ -4765,6 +4771,7 @@
                 
                 // Roaming & oscillating movement state
                 this.nextNestReturn = 0; // Frame when roamer should return to nest
+                this.nextGrazerSpawn = 0; // Frame when farmer should spawn next grazer
                 this.oscillatePhase = 0; // Current phase in oscillation cycle (0-3)
                 
                 this.dead = false;
@@ -5653,30 +5660,39 @@
                     this.health += 0.05 * this.skills.HEALTH * groupBenefits.healingBonus;
                 }
 
-                if (this.role === 'Botanist') this.energy += 0.1; 
-                if (this.role === 'Botanist' && this.energy > 150 && Math.random() < 0.02) {
-                    sim.spawnResource(null, this.pos.x + (Math.random()*20-10), this.pos.y + (Math.random()*20-10), 'SEED', false, this.tribeId);
-                    this.energy -= 30; 
-                }
-                
-                // BOTANIST FERTILIZATION TRAIL - plants seeds and fertilizes as they move
-                if (this.role === 'Botanist' && Math.random() < CONFIG.botanistFertilizeRate) {
-                    // Fertilize nearby food/seed resources (extend their life)
-                    let nearbyFood = resources.filter(r => 
-                        (r.type === 'FOOD' || r.type === 'SEED') && 
-                        Vector.dist(this.pos, r.pos) < CONFIG.botanistFertilizeRadius
-                    );
-                    nearbyFood.forEach(r => {
-                        if (r.life < r.maxLife) {
-                            r.life = Math.min(r.maxLife, r.life + 50); // Restore life
-                        }
-                    });
+                // BOTANIST BEHAVIOR - Find food areas and grow more food
+                if (this.role === 'Botanist') {
+                    this.energy += 0.1; // Botanists are energy efficient
                     
-                    // Plant new seeds occasionally
-                    if (Math.random() < 0.3 && this.energy > 30) {
-                        sim.spawnResource(null, this.pos.x + (Math.random()*30-15), this.pos.y + (Math.random()*30-15), 'SEED', false, this.tribeId);
-                        this.energy -= 5;
+                    // Fertilize nearby food resources (extend their life)
+                    if (Math.random() < CONFIG.botanistFertilizeRate) {
+                        let nearbyFood = resources.filter(r => 
+                            r.type === 'FOOD' && 
+                            Vector.dist(this.pos, r.pos) < CONFIG.botanistFertilizeRadius
+                        );
+                        nearbyFood.forEach(r => {
+                            if (r.life < r.maxLife) {
+                                r.life = Math.min(r.maxLife, r.life + 50); // Restore life
+                            }
+                        });
+                    }
+                    
+                    // When near food areas, plant more food
+                    let nearbyFoodCount = resources.filter(r => 
+                        r.type === 'FOOD' && 
+                        r.active &&
+                        Vector.dist(this.pos, r.pos) < 80
+                    ).length;
+                    
+                    // If in a food-rich area and have energy, grow more food
+                    if (nearbyFoodCount >= 2 && this.energy > 50 && Math.random() < 0.03) {
+                        // Plant new food near existing food
+                        let plantX = this.pos.x + (Math.random() * 60 - 30);
+                        let plantY = this.pos.y + (Math.random() * 60 - 30);
+                        sim.spawnResource(null, plantX, plantY, 'FOOD', false, this.tribeId);
+                        this.energy -= 20;
                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#4ade80', 'leaf'));
+                        this.state = "Growing Food";
                     }
                 }
                 
@@ -6171,18 +6187,67 @@
                     }
                 }
 
-                // BOTANIST GARDENING
-                if (this.role === 'Botanist' && this.carrying && this.carrying.type === 'SEED' && myNest) {
-                    // Plant seed near nest
-                    forces.base = this.seek(myNest.pos).mult(1.5);
-                    this.state = "Planting";
-                    active = true;
-                    if (distToNest < 80 && distToNest > 30) {
-                        // Plant here
-                        this.carrying.active = false;
-                        sim.spawnResource(null, this.pos.x, this.pos.y, 'FOOD', false, this.tribeId); // Instant grow for now, or could spawn new SEED
-                        this.carrying = null;
-                        sim.particles.push(new Particle(this.pos.x, this.pos.y, '#4ade80', 'spark'));
+                // SCOUT BEHAVIOR - Explore and find resources
+                if (this.role === 'Scout' && !this.carrying && !active) {
+                    // Scouts actively explore to find resources
+                    // They're attracted to areas with resources they haven't seen recently
+                    let nearbyResources = localRes.filter(r => 
+                        r.active && 
+                        !r.carrier &&
+                        Vector.dist(this.pos, r.pos) < 200
+                    );
+                    
+                    if (nearbyResources.length > 0) {
+                        // Find the most valuable unexplored resource
+                        let bestResource = null;
+                        let bestValue = -1;
+                        for (let r of nearbyResources) {
+                            let value = weightedResourceEnergy(r.type) || 10;
+                            // Prefer resources further from nest (exploration)
+                            let distFromNest = myNest ? Vector.dist(r.pos, myNest.pos) : 0;
+                            value += distFromNest / 50; // Bonus for distant resources
+                            if (value > bestValue) {
+                                bestValue = value;
+                                bestResource = r;
+                            }
+                        }
+                        
+                        if (bestResource) {
+                            forces.food = this.seek(bestResource.pos).mult(1.5);
+                            this.state = "Scouting";
+                            active = true;
+                        }
+                    } else {
+                        // No nearby resources - explore outward
+                        forces.wander = this.wander().mult(2.0);
+                        this.state = "Exploring";
+                        active = true;
+                    }
+                }
+
+                // BOTANIST BEHAVIOR - Seek food areas to cultivate
+                if (this.role === 'Botanist' && !this.carrying) {
+                    // Find nearby food resources to cultivate
+                    let foodTargets = localRes.filter(r => 
+                        r.type === 'FOOD' && 
+                        r.active && 
+                        !r.carrier &&
+                        Vector.dist(this.pos, r.pos) < 150
+                    );
+                    
+                    if (foodTargets.length > 0) {
+                        // Seek the closest food area
+                        let closestFood = foodTargets.sort((a, b) => 
+                            Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                        )[0];
+                        
+                        let foodDist = Vector.dist(this.pos, closestFood.pos);
+                        if (foodDist > 40) {
+                            // Move toward food areas
+                            forces.food = this.seek(closestFood.pos).mult(1.2);
+                            this.state = "Seeking Food Area";
+                            active = true;
+                        }
                     }
                 }
 
@@ -6994,11 +7059,13 @@
                 
                 // FARMER BEHAVIOR
                 if (this.role === 'Farmer') {
-                    // Spawn grazers based on health
-                    let healthRatio = this.health / this.maxHealth;
-                    if (healthRatio > CONFIG.farmerSpawnGrazerHealthThreshold && 
-                        Math.random() < CONFIG.farmerSpawnGrazerRate && 
-                        this.energy > 50) {
+                    // Initialize spawn timer if not set
+                    if (this.nextGrazerSpawn === 0) {
+                        this.nextGrazerSpawn = sim.frame + 10;
+                    }
+                    
+                    // Farmers spawn 1 grazer every 10 steps (if they have enough energy)
+                    if (sim.frame >= this.nextGrazerSpawn && this.energy > 50) {
                         // Spawn a grazer nearby
                         let spawnX = this.pos.x + (Math.random() * 60 - 30);
                         let spawnY = this.pos.y + (Math.random() * 60 - 30);
@@ -7020,6 +7087,9 @@
                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#84cc16', 'leaf'));
                         sfx.play('birth', HARMONICS.A4, 0.1); // Harmonic birth tone
                         this.state = "Spawning Grazer";
+                        
+                        // Schedule next spawn in 10 steps
+                        this.nextGrazerSpawn = sim.frame + 10;
                     }
                     
                     // Aggressively attack predators
@@ -8112,7 +8182,11 @@
                         }
 
                         if (r.active && !r.carrier && (r.type === 'FOOD' || r.type === 'UNIQUE')) {
-                             let weight = 100 / (d*d); 
+                             let weight = 100 / (d*d);
+                             // Botanists are strongly attracted to food areas to cultivate them
+                             if (this.role === 'Botanist' && r.type === 'FOOD') {
+                                 weight *= 2.0; // Botanists prioritize food areas
+                             }
                              // UNIQUE resources are extra attractive for tribe members or commercial partners
                              if (r.type === 'UNIQUE') {
                                  if (this.tribeId === r.nestId) {
