@@ -107,8 +107,28 @@
             </div>
 
             <div class="flex gap-2 items-center">
-                <button onclick="sim.setTool('infect')" id="btn-infect" class="px-3 py-1 bg-green-900/80 hover:bg-green-700 rounded text-xs border border-green-500 transition text-white font-bold">Infect Tool</button>
-                <button onclick="sim.setTool('monster')" id="btn-monster" class="px-3 py-1 bg-purple-900/80 hover:bg-purple-700 rounded text-xs border border-purple-500 transition text-white font-bold">Spawn Monster</button>
+                <button onclick="sim.setTool('nest')" id="btn-nest" class="px-3 py-1 bg-orange-900/80 hover:bg-orange-700 rounded text-xs border border-orange-500 transition text-white font-bold">Place Nest</button>
+                <button onclick="sim.setTool('boon')" id="btn-boon" class="px-3 py-1 bg-yellow-900/80 hover:bg-yellow-700 rounded text-xs border border-yellow-500 transition text-white font-bold">Place Boon</button>
+                <button onclick="sim.setTool('infect')" id="btn-infect" class="px-3 py-1 bg-green-900/80 hover:bg-green-700 rounded text-xs border border-green-500 transition text-white font-bold">Place Germs</button>
+                <button onclick="sim.setTool('monster')" id="btn-monster" class="px-3 py-1 bg-purple-900/80 hover:bg-purple-700 rounded text-xs border border-purple-500 transition text-white font-bold">Place Monster</button>
+                <select id="agent-type-select" onchange="sim.setTool('agent-' + this.value)" class="px-2 py-1 bg-indigo-900/80 hover:bg-indigo-700 rounded text-xs border border-indigo-500 transition text-white font-bold">
+                    <option value="">Place Agents...</option>
+                    <option value="Soldier">Place Soldiers</option>
+                    <option value="Farmer">Place Farmers</option>
+                    <option value="Merchant">Place Merchants</option>
+                    <option value="Diplomat">Place Diplomats</option>
+                    <option value="Scientist">Place Scientists</option>
+                    <option value="Artisan">Place Artisans</option>
+                    <option value="Guardian">Place Guardians</option>
+                    <option value="Raider">Place Raiders</option>
+                    <option value="Gatherer">Place Gatherers</option>
+                    <option value="Scout">Place Scouts</option>
+                    <option value="Builder">Place Builders</option>
+                    <option value="Miner">Place Miners</option>
+                    <option value="Botanist">Place Botanists</option>
+                    <option value="Teacher">Place Teachers</option>
+                    <option value="Garbage Collector">Place Garbage Collectors</option>
+                </select>
                 <button onclick="sim.reset()" class="px-3 py-1 bg-red-900/50 hover:bg-red-700 rounded text-xs border border-red-700 transition">Reset</button>
                 <button onclick="sim.togglePause()" class="px-3 py-1 bg-blue-900/50 hover:bg-blue-700 rounded text-xs border border-blue-700 transition" id="pause-btn">Pause</button>
                 
@@ -2221,7 +2241,7 @@
             constructor(x, y) {
                 this.pos = new Vector(x, y);
                 this.radius = 30; // Reduced from 60 (50% reduction) - smaller range
-                this.life = 5000; 
+                this.life = 1800; // 30 seconds at 60 fps (30 * 60 = 1800 frames)
             }
             update() {
                 this.life--;
@@ -10372,24 +10392,56 @@
             }
             
             setTool(tool) {
-                this.actionMode = tool;
+                let btnNest = document.getElementById('btn-nest');
+                let btnBoon = document.getElementById('btn-boon');
                 let btnInfect = document.getElementById('btn-infect');
-                let btnMonster = document.getElementById('btn-monster'); // ADDED ID TO MONSTER BUTTON
+                let btnMonster = document.getElementById('btn-monster');
+                let agentSelect = document.getElementById('agent-type-select');
                 let alertBox = document.getElementById('tool-alert');
                 
+                // Toggle behavior: if clicking the same tool that's already active, deactivate it
+                if (tool === this.actionMode) {
+                    this.actionMode = null;
+                    tool = null;
+                    if (agentSelect) agentSelect.value = '';
+                } else {
+                    this.actionMode = tool;
+                }
+                
                 // Clear classes
+                if(btnNest) btnNest.classList.remove('active-tool');
+                if(btnBoon) btnBoon.classList.remove('active-tool');
                 btnInfect.classList.remove('active-tool');
-                if(btnMonster) btnMonster.classList.remove('active-tool-monster'); // Custom class for purple
+                if(btnMonster) btnMonster.classList.remove('active-tool-monster');
                 alertBox.classList.add('hidden');
 
-                if (this.actionMode === 'infect') {
+                if (this.actionMode === 'nest') {
+                    if(btnNest) btnNest.classList.add('active-tool');
+                    if (agentSelect) agentSelect.value = '';
+                    alertBox.textContent = "⚠️ PLACE NEST MODE - CLICK ON CANVAS TO PLACE ⚠️";
+                    alertBox.classList.remove('hidden');
+                } else if (this.actionMode === 'boon') {
+                    if(btnBoon) btnBoon.classList.add('active-tool');
+                    if (agentSelect) agentSelect.value = '';
+                    alertBox.textContent = "⚠️ PLACE BOON MODE - CLICK ON CANVAS TO PLACE 50 RESOURCES ⚠️";
+                    alertBox.classList.remove('hidden');
+                } else if (this.actionMode === 'infect') {
                     btnInfect.classList.add('active-tool');
-                    alertBox.textContent = "⚠️ INFECTION TOOL ACTIVE - CLICK TO DROP ⚠️";
+                    if (agentSelect) agentSelect.value = '';
+                    alertBox.textContent = "⚠️ PLACE GERMS MODE - CLICK ON CANVAS TO PLACE ⚠️";
                     alertBox.classList.remove('hidden');
                 } else if (this.actionMode === 'monster') {
                     if(btnMonster) btnMonster.classList.add('active-tool-monster');
-                    alertBox.textContent = "⚠️ MONSTER SPAWN ACTIVE - CLICK LOCATION ⚠️";
+                    if (agentSelect) agentSelect.value = '';
+                    alertBox.textContent = "⚠️ PLACE MONSTER MODE - CLICK ON CANVAS TO PLACE ⚠️";
                     alertBox.classList.remove('hidden');
+                } else if (this.actionMode && this.actionMode.startsWith('agent-')) {
+                    let agentType = this.actionMode.replace('agent-', '');
+                    if (agentSelect) agentSelect.value = agentType;
+                    alertBox.textContent = `⚠️ PLACE ${agentType.toUpperCase()}S MODE - CLICK ON CANVAS TO PLACE 15 AGENTS ⚠️`;
+                    alertBox.classList.remove('hidden');
+                } else {
+                    if (agentSelect) agentSelect.value = '';
                 }
             }
 
@@ -10549,6 +10601,70 @@
                 const y = e.clientY - rect.top;
                 const m = new Vector(x, y);
 
+                // NEST TOOL
+                if (this.actionMode === 'nest') {
+                    // Create a new tribe
+                    const colors = ['#ef4444', '#3b82f6', '#10b981', '#eab308', '#d946ef', '#f97316', '#06b6d4', '#8b5cf6'];
+                    const bases = ['Red', 'Blue', 'Green', 'Gold', 'Void', 'Orange', 'Cyan', 'Purple'];
+                    const suffixes = ['Claw', 'Fin', 'Leaf', 'Spear', 'Walkers', 'Fang', 'Wing', 'Shield'];
+                    const colorIndex = this.tribes.nextId % colors.length;
+                    const nameIndex = this.tribes.nextId % bases.length;
+                    const tribeName = bases[nameIndex] + ' ' + suffixes[this.tribes.nextId % suffixes.length];
+                    const tribeId = this.tribes.createTribe(tribeName, colors[colorIndex]);
+                    
+                    // Create nest at click location
+                    const newNest = new Nest(x, y, tribeId);
+                    this.tribes.nests.push(newNest);
+                    
+                    // Initialize nest with starting agents (similar to init)
+                    for(let i=0; i<3; i++) {
+                        let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
+                        a.role = 'Builder'; a.assignColor(); a.age = 200;
+                        this.agents.push(a);
+                    }
+                    for(let i=0; i<3; i++) {
+                        let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
+                        a.role = 'Guardian'; a.assignColor(); a.age = 200;
+                        this.agents.push(a);
+                    }
+                    for(let i=0; i<2; i++) {
+                        let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
+                        a.role = 'Miner'; a.assignColor(); a.age = 200;
+                        this.agents.push(a);
+                    }
+                    for(let i=0; i<2; i++) {
+                        let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
+                        a.role = 'Botanist'; a.assignColor(); a.age = 200;
+                        this.agents.push(a);
+                    }
+                    
+                    // NEST BIRTH SOUND
+                    if (typeof sfx !== 'undefined' && sfx.enabled) {
+                        sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1);
+                    }
+                    this.particles.push(new Particle(x, y, '#ffffff', 'spark'));
+                    this.setStatusMessage(`🏠 NEST PLACED: ${tribeName} at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
+                    this.setTool(null);
+                    return;
+                }
+
+                // BOON TOOL - Place 50 random resources (not food)
+                if (this.actionMode === 'boon') {
+                    const resourceTypes = ['MAT', 'STIM', 'SEED', 'TREASURE', 'HERB', 'ORE', 'RELIC'];
+                    for (let i = 0; i < 50; i++) {
+                        let angle = (i / 50) * Math.PI * 2;
+                        let offset = 30 + Math.random() * 40;
+                        let spawnX = x + Math.cos(angle) * offset;
+                        let spawnY = y + Math.sin(angle) * offset;
+                        let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+                        this.spawnResource(null, spawnX, spawnY, resourceType);
+                    }
+                    this.particles.push(new Particle(x, y, '#fbbf24', 'star'));
+                    this.setStatusMessage(`💰 BOON PLACED: 50 resources scattered at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
+                    this.setTool(null);
+                    return;
+                }
+
                 // INFECTION TOOL
                 if (this.actionMode === 'infect') {
                     this.plagues.push(new Plague(x, y));
@@ -10560,6 +10676,61 @@
                 // MONSTER TOOL
                 if (this.actionMode === 'monster') {
                     this.spawnMonsterAt(x, y);
+                    this.setTool(null);
+                    return;
+                }
+
+                // AGENT PLACEMENT TOOL
+                if (this.actionMode && this.actionMode.startsWith('agent-')) {
+                    let agentType = this.actionMode.replace('agent-', '');
+                    
+                    // Get a random existing tribe
+                    let existingTribes = Object.keys(this.tribes.tribes).map(id => parseInt(id)).filter(id => id !== -1);
+                    if (existingTribes.length === 0) {
+                        this.setStatusMessage(`⚠️ No existing tribes to join!`, 300);
+                        this.setTool(null);
+                        return;
+                    }
+                    let randomTribeId = existingTribes[Math.floor(Math.random() * existingTribes.length)];
+                    
+                    // Spawn 15 agents of the specified type
+                    for (let i = 0; i < 15; i++) {
+                        let angle = (i / 15) * Math.PI * 2;
+                        let offset = 20 + Math.random() * 15;
+                        let spawnX = x + Math.cos(angle) * offset;
+                        let spawnY = y + Math.sin(angle) * offset;
+                        let agent = new Agent(spawnX, spawnY, null, null, randomTribeId);
+                        agent.role = agentType;
+                        agent.assignColor();
+                        agent.age = Math.random() * CONFIG.adultAge;
+                        
+                        // Apply role-specific bonuses (similar to spawnAgent)
+                        if (agentType === 'Soldier') {
+                            agent.health += 30;
+                            agent.maxHealth += 30;
+                            agent.canShootRanged = true;
+                        } else if (agentType === 'Raider') {
+                            agent.isPredator = true;
+                            agent.health += 25;
+                            agent.maxHealth += 25;
+                            agent.color = '#dc2626';
+                        } else if (agentType === 'Farmer') {
+                            agent.isPrey = true;
+                            agent.isGrazer = true;
+                            agent.health += 10;
+                            agent.maxHealth += 10;
+                            agent.color = '#fde047';
+                        }
+                        
+                        // Call determineRole if it exists (sets up role-specific properties)
+                        if (typeof agent.determineRole === 'function') {
+                            agent.determineRole();
+                        }
+                        this.agents.push(agent);
+                    }
+                    
+                    let tribeName = this.tribes.tribes[randomTribeId]?.name || `Tribe ${randomTribeId}`;
+                    this.setStatusMessage(`👥 PLACED 15 ${agentType}s joining ${tribeName} at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
                     this.setTool(null);
                     return;
                 }
@@ -11411,8 +11582,34 @@
 
                 // Plague infection logic - reduced damage
                 this.plagues.forEach(p => {
+                    // Damage agents in plague radius
                     this.agents.forEach(a => {
-                        if (Vector.dist(a.pos, p.pos) < p.radius) a.disease = 200; // Reduced from 500 (60% reduction) - less severe
+                        if (Vector.dist(a.pos, p.pos) < p.radius) {
+                            // Highly damaging plague - severe disease and direct health damage
+                            a.disease = Math.max(a.disease, 800); // Severe disease (was 200)
+                            // Direct health damage - quite damaging
+                            a.health -= 3; // Direct damage per frame while in plague
+                            // Also damage energy
+                            a.energy -= 1.5; // More energy drain
+                            // Visual feedback
+                            if (this.frame % 5 === 0) {
+                                this.particles.push(new Particle(a.pos.x, a.pos.y, '#22c55e', 'spark')); // Green particles for plague damage
+                            }
+                        }
+                    });
+                    
+                    // Damage nests in plague radius
+                    this.tribes.nests.forEach(nest => {
+                        if (Vector.dist(nest.pos, p.pos) < p.radius + nest.radius) {
+                            // Plague damages nest health and wealth
+                            nest.hp -= 2; // Direct HP damage per frame
+                            nest.health = Math.min(nest.maxHealth, nest.hp);
+                            nest.wealth -= 1; // Also damages wealth
+                            // Visual feedback for nest damage
+                            if (this.frame % 10 === 0) {
+                                this.particles.push(new Particle(nest.pos.x, nest.pos.y, '#22c55e', 'spark')); // Green particles for nest plague damage
+                            }
+                        }
                     });
                 });
                 this.plagues = this.plagues.filter(p => p.life > 0);
@@ -12655,6 +12852,22 @@
                 // We keep staggered updates but ensure all agents draw every frame for smooth visuals
                 this.agents.forEach(a => a.draw(this.ctx, a === this.selected));
                 this.projectiles.forEach(p => p.draw(this.ctx));
+                
+                // Draw plagues (infection zones)
+                this.plagues.forEach(p => {
+                    if (p.life > 0) {
+                        // Draw plague as a pulsing green circle
+                        let alpha = 0.3 + 0.2 * Math.sin(this.frame * 0.1); // Pulsing effect
+                        this.ctx.fillStyle = `rgba(34, 197, 94, ${alpha})`; // Green with transparency
+                        this.ctx.beginPath();
+                        this.ctx.arc(p.pos.x, p.pos.y, p.radius, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        // Draw border
+                        this.ctx.strokeStyle = `rgba(34, 197, 94, 0.6)`;
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+                    }
+                });
                 
                 // PERFORMANCE OPTIMIZATION: Draw particles less frequently when population is high
                 let particleDrawInterval = 1;
