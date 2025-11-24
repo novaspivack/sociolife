@@ -1095,11 +1095,11 @@
             popCap: 170, 
             mutationRate: 0.35,
             learningRate: 0.1,
-            resSpawnRate: 0.9,
-            foodSpawnRate: 0.2,
-            foodSpawnNearNestsRate: 0.1,
+            resSpawnRate: 1.08, // Increased by 20% (was 0.9)
+            foodSpawnRate: 1.0, // Guaranteed spawn per frame + chance for extra (was 0.48)
+            foodSpawnNearNestsRate: 0.5, // Much higher (was 0.22) - spawn near nests more often
             foodNutritionalValue: 1.6,
-            maxRes: 200,
+            maxRes: 400, // Doubled (was 200) - allow more resources on map
             mateCost: 20,
             mateThreshold: 120, 
             baseRadius: 70,
@@ -1319,23 +1319,23 @@
             rangedCombatChance: 0.6,
             warExhaustionPerDeath: 5,
             warExhaustionDecay: 0.1,
-            // Food decay system
-            foodDecayRate: 0.0015,
-            foodMinLife: 200,
-            foodMaxLife: 600,
+            // Food decay system - food lasts longer now
+            foodDecayRate: 0.00075, // Reduced by 50% (was 0.0015) - food decays slower
+            foodMinLife: 400, // Doubled (was 200) - food lasts longer
+            foodMaxLife: 1200, // Doubled (was 600) - food lasts longer
             foodNearNestLifeMultiplier: 0.5,
             botanistFertilizeRate: 0.09,
             botanistFertilizeRadius: 20,
             resourceDecayTimers: {
-                FOOD: 2500,
-                SEED: 5000,
-                MAT: 2000,
-                ORE: 3300,
-                TREASURE: 5400,
-                STIM: 3000,
-                HERB: 10000,
-                RELIC: 10000,
-                UNIQUE: 5000
+                FOOD: 5000, // Doubled (was 2500) - food resources last longer
+                SEED: 10000, // Doubled (was 5000) - seeds last longer
+                MAT: 4000, // Doubled (was 2000) - materials last longer
+                ORE: 6600, // Doubled (was 3300) - ore lasts longer
+                TREASURE: 10800, // Doubled (was 5400) - treasure lasts longer
+                STIM: 6000, // Doubled (was 3000) - stims last longer
+                HERB: 20000, // Doubled (was 10000) - herbs last longer
+                RELIC: 20000, // Doubled (was 10000) - relics last longer
+                UNIQUE: 10000 // Doubled (was 5000) - unique resources last longer
             }
         };
 
@@ -3857,8 +3857,8 @@
                     // Normalize direction - points TOWARDS other nest
                         direction.normalize();
                         
-                    let dipBond = sim.tribes.tribes[this.tribeId].diplomaticBonds[otherNest.tribeId] || 0;
-                    let comBond = sim.tribes.tribes[this.tribeId].commercialBonds[otherNest.tribeId] || 0;
+                    let dipBond = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].diplomaticBonds && sim.tribes.tribes[this.tribeId].diplomaticBonds[otherNest.tribeId]) || 0;
+                    let comBond = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].commercialBonds && sim.tribes.tribes[this.tribeId].commercialBonds[otherNest.tribeId]) || 0;
                     // Lower threshold to detect bonds earlier (was 20)
                     let hasBond = dipBond > 10 || comBond > 10;
                     let isEnemy = tribe.atWarWith && tribe.atWarWith[otherNest.tribeId];
@@ -4019,7 +4019,7 @@
                 return true;
             }
             draw(ctx) {
-                let tColor = sim.tribes.tribes[this.tribeId].color;
+                let tColor = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].color) || '#888888';
                 
                 // Nest radius directly reflects nest health and stats (no random variations)
                 // Base size from wealth
@@ -5377,7 +5377,7 @@
                 if (dna) this.dna = { ...defaults, ...dna };
                 else this.dna = defaults;
 
-                this.maxBonds = Math.max(1, Math.floor(this.dna.sociability * 4)); 
+                this.maxBonds = Math.max(1, Math.floor((this.dna && this.dna.sociability || 0.5) * 4)); 
                 
                 // Bond types: Each partner has a bond type with different effects
                 this.bondTypes = {}; // Map from partner ID to bond type
@@ -5391,9 +5391,9 @@
                 };
 
                 this.determineRole(parents);
-                this.baseRadius = this.dna.size * 5 + 3;
+                this.baseRadius = (this.dna && this.dna.size || 1) * 5 + 3;
                 this.radius = this.baseRadius;
-                this.baseSpeed = this.dna.speed * 2 + 1 + (this.dna.agility || 0.5) * 0.5; 
+                this.baseSpeed = (this.dna && this.dna.speed || 0.5) * 2 + 1 + ((this.dna && this.dna.agility) || 0.5) * 0.5; 
                 this.maxSpeed = this.baseSpeed;
                 this.baseMaxLifespan = this.maxLifespan;
                 this.hasRigidLifespanBonus = false;
@@ -5421,7 +5421,7 @@
                 this.momentum = new Vector(0, 0);
                 this.mass = this.baseRadius * (this.health / 100); // Mass = size × health factor
                 this.maxForce = 0.3; 
-                this.baseSense = 120 + (this.dna.sense * 150);
+                this.baseSense = 120 + ((this.dna && this.dna.sense || 0.5) * 150);
                 this.senseRad = this.baseSense; 
                 
                 if (parents && parents.skills) {
@@ -5497,22 +5497,23 @@
                 // Calculate manufacturing bonus for artisan role (MASSIVELY BOOSTED!)
                 let manufacturingBonus = commerceBonus * 2.0 + 0.5; // 4x increase + base bonus
 
+                const dna = this.dna || {};
                 const traits = [
-                    { name: 'Garbage Collector', val: (this.dna.mining + this.dna.altruism + this.dna.curiosity) / 2.0 + 0.2 }, // Early tech tree role
-                    { name: 'Farmer', val: (this.dna.botany + this.dna.altruism + this.dna.defense) / 2.0 + 0.15 }, // Spawns grazers, protects them
-                    { name: 'Soldier', val: this.dna.aggression * 1.8 + 0.3 }, // BOOSTED soldier spawning!
-                    { name: 'Botanist', val: this.dna.botany },
-                    { name: 'Builder', val: this.dna.builder },
-                    { name: 'Guardian', val: (this.dna.defense + this.dna.defending)/2 },
-                    { name: 'Scout', val: this.dna.speed },
-                    { name: 'Miner', val: this.dna.mining + 0.2 }, // Small boost
-                    { name: 'Raider', val: this.dna.raiding },
-                    { name: 'Artisan', val: this.dna.manufacturing * 2.0 + manufacturingBonus }, // DOUBLED base + huge bonus!
-                    { name: 'Scientist', val: this.dna.intelligence * 1.5 + 0.2 }, // Boosted from 1.2 to 1.5
-                    { name: 'Merchant', val: this.dna.commerce * 1.5 + commerceBonus }, // Boosted 1.5x plus bonus
-                    { name: 'Healer', val: (this.dna.altruism + this.dna.botany) / 1.5 + 0.15 }, // Small boost
-                    { name: 'Diplomat', val: (this.dna.social + this.dna.commerce + this.dna.curiosity) / 2.5 },
-                    { name: 'Teacher', val: (this.dna.social + this.dna.intelligence) / 2.0 + 0.2 } // Small boost
+                    { name: 'Garbage Collector', val: ((dna.mining || 0) + (dna.altruism || 0) + (dna.curiosity || 0)) / 2.0 + 0.2 }, // Early tech tree role
+                    { name: 'Farmer', val: ((dna.botany || 0) + (dna.altruism || 0) + (dna.defense || 0)) / 2.0 + 0.15 }, // Spawns grazers, protects them
+                    { name: 'Soldier', val: (dna.aggression || 0) * 1.8 + 0.3 }, // BOOSTED soldier spawning!
+                    { name: 'Botanist', val: dna.botany || 0 },
+                    { name: 'Builder', val: dna.builder || 0 },
+                    { name: 'Guardian', val: ((dna.defense || 0) + (dna.defending || 0))/2 },
+                    { name: 'Scout', val: dna.speed || 0 },
+                    { name: 'Miner', val: (dna.mining || 0) + 0.2 }, // Small boost
+                    { name: 'Raider', val: dna.raiding || 0 },
+                    { name: 'Artisan', val: (dna.manufacturing || 0) * 2.0 + manufacturingBonus }, // DOUBLED base + huge bonus!
+                    { name: 'Scientist', val: (dna.intelligence || 0) * 1.5 + 0.2 }, // Boosted from 1.2 to 1.5
+                    { name: 'Merchant', val: (dna.commerce || 0) * 1.5 + commerceBonus }, // Boosted 1.5x plus bonus
+                    { name: 'Healer', val: ((dna.altruism || 0) + (dna.botany || 0)) / 1.5 + 0.15 }, // Small boost
+                    { name: 'Diplomat', val: ((dna.social || 0) + (dna.commerce || 0) + (dna.curiosity || 0)) / 2.5 },
+                    { name: 'Teacher', val: ((dna.social || 0) + (dna.intelligence || 0)) / 2.0 + 0.2 } // Small boost
                 ];
                 traits.sort((a, b) => b.val - a.val);
                 this.role = traits[0].name;
@@ -5713,32 +5714,43 @@
                     return [this];
                 }
                 
-                // Returns all agents in the bonded group (recursively finds all connected partners)
+                // PERFORMANCE: Limit traversal depth and group size for large connected groups
+                const MAX_GROUP_SIZE = 50; // Cap group size to prevent expensive traversals
+                const MAX_DEPTH = 10; // Limit recursion depth
+                
                 let group = new Set([this]);
                 let toCheck = [...this.partners];
                 let checked = new Set([this]);
+                let depth = 0;
                 
-                while (toCheck.length > 0) {
+                while (toCheck.length > 0 && group.size < MAX_GROUP_SIZE && depth < MAX_DEPTH) {
                     let agent = toCheck.pop();
                     if (!agent || agent.dead || checked.has(agent)) continue;
                     
                     checked.add(agent);
                     group.add(agent);
                     
-                    // Add this agent's partners to check
-                    for (let partner of agent.partners) {
-                        if (!checked.has(partner)) {
-                            toCheck.push(partner);
+                    // Stop if we've hit the size limit
+                    if (group.size >= MAX_GROUP_SIZE) break;
+                    
+                    // Add this agent's partners to check (only if not too deep)
+                    if (depth < MAX_DEPTH - 1) {
+                        for (let partner of agent.partners) {
+                            if (!checked.has(partner) && group.size < MAX_GROUP_SIZE) {
+                                toCheck.push(partner);
+                            }
                         }
                     }
+                    depth++;
                 }
                 
                 return Array.from(group);
             }
 
             invalidateGroupCache() {
-                // REMOVED CACHING - No longer needed, always recalculate
-                // This method kept for compatibility but does nothing
+                // Invalidate cached bonded group
+                this._cachedBondedGroup = null;
+                this._cachedBondedGroupFrame = undefined;
             }
 
             getCachedBondedGroup() {
@@ -5746,8 +5758,26 @@
                 if (this.isSuperAgent) {
                     return [this];
                 }
-                // REMOVED CACHING - Causing doubling artifacts during high activity
-                // Always recalculate to ensure accuracy and prevent visual glitches
+                
+                // PERFORMANCE: Cache group for a few frames to avoid expensive recursive traversal
+                if (typeof sim !== 'undefined') {
+                    let cacheInterval = 5; // Cache for 5 frames
+                    if (this._cachedBondedGroup && this._cachedBondedGroupFrame !== undefined) {
+                        let framesSinceCache = sim.frame - this._cachedBondedGroupFrame;
+                        if (framesSinceCache < cacheInterval) {
+                            // Validate cache - remove dead agents
+                            this._cachedBondedGroup = this._cachedBondedGroup.filter(a => a && !a.dead);
+                            return this._cachedBondedGroup;
+                        }
+                    }
+                    
+                    // Recalculate and cache
+                    let group = this.getBondedGroup();
+                    this._cachedBondedGroup = group;
+                    this._cachedBondedGroupFrame = sim.frame;
+                    return group;
+                }
+                
                 return this.getBondedGroup();
             }
             
@@ -5906,6 +5936,7 @@
             }
 
             learnSkill(skill, level) {
+                if (!this.skills) this.skills = {};
                 if (this.skills[skill] < level) {
                     this.skills[skill] = level;
                     this.applySkills();
@@ -5914,10 +5945,10 @@
             }
 
             applySkills() {
-                this.maxSpeed = this.baseSpeed + (this.skills.SPEED * 0.3); 
-                this.maxEnergy = 300 + (this.skills.ENERGY * 100);
-                this.maxHealth = 100 + (this.skills.HEALTH * 50);
-                this.senseRad = this.baseSense + (this.skills.SENSE * 50);
+                this.maxSpeed = this.baseSpeed + ((this.skills && this.skills.SPEED || 0) * 0.3); 
+                this.maxEnergy = 300 + ((this.skills && this.skills.ENERGY || 0) * 100);
+                this.maxHealth = 100 + ((this.skills && this.skills.HEALTH || 0) * 50);
+                this.senseRad = this.baseSense + ((this.skills && this.skills.SENSE || 0) * 50);
             }
             
             learn(key, amount) {
@@ -6224,7 +6255,7 @@
                 if (this.partners.length > 0) {
                      let luckyIndex = Math.floor(Math.random() * this.partners.length);
                      let p = this.partners[luckyIndex];
-                     let rigidType = this.rigidBonds[p.id];
+                     let rigidType = (this.rigidBonds && this.rigidBonds[p.id]) || null;
                      let breakRate = CONFIG.bondBreakRate;
                      if (rigidType) {
                          // Rigid bonds break much slower
@@ -6242,11 +6273,16 @@
                     let tribeCounts = {};
                     let totalBonded = 0;
                     
-                    this.partners.forEach(p => {
-                        if (!p.dead && p.tribeId !== -1 && p.role !== 'Monster') {
-                            tribeCounts[p.tribeId] = (tribeCounts[p.tribeId] || 0) + 1;
-                            totalBonded++;
-                        }
+                    // PERFORMANCE: Limit partner iteration for large groups
+                    let maxPartnersToCheck = 50;
+                    let partnersToCheck = this.partners.length > maxPartnersToCheck 
+                        ? this.partners.slice(0, maxPartnersToCheck) 
+                        : this.partners;
+                    
+                    partnersToCheck.forEach(p => {
+                        if (!p || p.dead || p.tribeId === -1 || p.role === 'Monster') return;
+                        tribeCounts[p.tribeId] = (tribeCounts[p.tribeId] || 0) + 1;
+                        totalBonded++;
                     });
                     
                     // Find majority tribe
@@ -6292,18 +6328,22 @@
 
                 // Resource Sharing & Child Feeding
                 if (this.partners.length > 0 && this.age % 10 === 0) {
-                    this.partners.forEach(p => {
-                        if (!p.dead) {
-                            if (this.isAdult() && !p.isAdult() && this.energy > 50) {
-                                let flow = 5;
-                                this.energy -= flow;
-                                p.energy += flow;
-                            }
-                            else if (this.energy > p.energy) {
-                                let flow = (this.energy - p.energy) * 0.05; 
-                                this.energy -= flow;
-                                p.energy += flow;
-                            }
+                    // PERFORMANCE: Limit partner iteration for large groups
+                    let maxPartnersForEnergy = 30;
+                    let partnersForEnergy = this.partners.length > maxPartnersForEnergy 
+                        ? this.partners.slice(0, maxPartnersForEnergy) 
+                        : this.partners;
+                    
+                    partnersForEnergy.forEach(p => {
+                        if (!p || p.dead) return;
+                        if (this.isAdult() && !p.isAdult() && this.energy > 50) {
+                            let flow = 5;
+                            this.energy -= flow;
+                            p.energy += flow;
+                        } else if (this.energy > p.energy) {
+                            let flow = (this.energy - p.energy) * 0.05; 
+                            this.energy -= flow;
+                            p.energy += flow;
                         }
                     });
                 }
@@ -6331,7 +6371,7 @@
                 }
                 
                 // Exile Logic
-                if (this.tribeId !== -1 && sim.tribes.tribes[this.tribeId].leaderId) {
+                if (this.tribeId !== -1 && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId) {
                      let leaderId = sim.tribes.tribes[this.tribeId].leaderId;
                      if (this.loyalty[leaderId] < -50) {
                          this.tribeId = -1; // Exile
@@ -6406,7 +6446,7 @@
                 }
 
                 // IMMORTALITY CHECK
-                let isVIP = (this.role === 'Guardian' || (this.tribeId !== -1 && sim.tribes.tribes[this.tribeId].leaderId === this.id));
+                let isVIP = (this.role === 'Guardian' || (this.tribeId !== -1 && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id));
                 
                 if (isVIP && myNest && myNest.wealth > 0) {
                     if (this.energy < 50) { this.energy += 50; myNest.wealth = Math.max(0, myNest.wealth - 1); }
@@ -6420,7 +6460,7 @@
                     this.maxSpeed = this.baseSpeed * 0.5; 
                     if (this.disease % 20 === 0) sim.particles.push(new Particle(this.pos.x, this.pos.y, '#22c55e'));
                 } else {
-                    this.maxSpeed = this.baseSpeed + (this.skills.SPEED * 0.3); 
+                    this.maxSpeed = this.baseSpeed + ((this.skills && this.skills.SPEED || 0) * 0.3); 
                 }
 
                 if (this.immunity > 0) {
@@ -6438,12 +6478,13 @@
                         this.researchPoints = 0;
                         const skillKeys = Object.keys(this.skills);
                         const learned = skillKeys[Math.floor(Math.random() * skillKeys.length)];
-                        this.learnSkill(learned, this.skills[learned] + 1);
+                        if (!this.skills) this.skills = {};
+                        this.learnSkill(learned, (this.skills[learned] || 0) + 1);
                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#60a5fa')); 
                     }
                 }
 
-                if (this.skills.HEALTH > 0 && this.health < this.maxHealth) {
+                if (this.skills && this.skills.HEALTH > 0 && this.health < this.maxHealth) {
                     let groupBenefits = this.getGroupBenefits();
                     this.health += 0.05 * this.skills.HEALTH * groupBenefits.healingBonus;
                 }
@@ -6548,7 +6589,7 @@
                 // LEADERS: Do not consume energy or resources of tribe
                 let isLeader = false;
                 if (this.tribeId !== -1 && typeof sim !== 'undefined' && sim.tribes) {
-                    isLeader = sim.tribes.tribes[this.tribeId].leaderId === this.id;
+                    isLeader = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id);
                 }
                 
                 if (!isLeader) {
@@ -7121,7 +7162,7 @@
                                             // Convert immediately to tribe
                                             agent.tribeId = this.tribeId;
                                             if (sim.tribes.tribes[this.tribeId]) {
-                                                agent.color = sim.tribes.tribes[this.tribeId].color;
+                                                agent.color = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].color) || agent.color;
                                             }
                                             // Increase charisma and love
                                             agent.charisma = Math.min(1.0, (agent.charisma || 0.5) + 0.15);
@@ -7349,7 +7390,7 @@
                 
                 // NEST DEFENSE
                 // BUILDERS DON'T DEFEND - They focus only on building
-                if (this.role !== 'Builder' && myNest && sim.tribes.tribes[this.tribeId].underAttack) {
+                if (this.role !== 'Builder' && myNest && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].underAttack) {
                     forces.base = this.seek(myNest.pos).mult(4.0);
                     this.state = "DEFENDING NEST";
                     active = true;
@@ -7545,7 +7586,7 @@
                 
                 // MUTUAL REPULSION for rigid bonds to prevent overlap (maintain stable shape)
                 this.partners.forEach(p => {
-                    let rigidType = this.rigidBonds[p.id];
+                    let rigidType = (this.rigidBonds && this.rigidBonds[p.id]) || null;
                     if (rigidType) {
                     let d = Vector.dist(this.pos, p.pos);
                         let minSeparation = this.radius + p.radius + 10; // Minimum comfortable distance
@@ -8982,11 +9023,15 @@
                                             sim._cleanupAfterWar();
                                             
                                             // Establish diplomatic bonds
-                                            let oldDipBond1 = sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] || 0;
-                                            let oldDipBond2 = sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] || 0;
-                                            
-                                            sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] = 30;
-                                            sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] = 30;
+                                            if (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[targetNest.tribeId]) {
+                                                if (!sim.tribes.tribes[this.tribeId].diplomaticBonds) sim.tribes.tribes[this.tribeId].diplomaticBonds = {};
+                                                if (!sim.tribes.tribes[targetNest.tribeId].diplomaticBonds) sim.tribes.tribes[targetNest.tribeId].diplomaticBonds = {};
+                                                let oldDipBond1 = sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] || 0;
+                                                let oldDipBond2 = sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] || 0;
+                                                
+                                                sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] = 30;
+                                                sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] = 30;
+                                            }
                                             
                                             // DIPLOMATIC BOND CREATED - Nice harmonious sound
                                             if ((oldDipBond1 < 10 || oldDipBond2 < 10) && typeof sfx !== 'undefined' && sfx.enabled) {
@@ -9019,8 +9064,14 @@
                                             bondGrowth *= 2.5; // 2.5x faster bond growth during war (aggressive diplomacy)
                                         }
                                         
-                                        let currentBond = sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] || 0;
+                                        let currentBond = (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].diplomaticBonds && sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId]) || 0;
                                         let newBond = Math.min(100, currentBond + bondGrowth);
+                                        if (sim.tribes.tribes[this.tribeId] && !sim.tribes.tribes[this.tribeId].diplomaticBonds) {
+                                            sim.tribes.tribes[this.tribeId].diplomaticBonds = {};
+                                        }
+                                        if (sim.tribes.tribes[targetNest.tribeId] && !sim.tribes.tribes[targetNest.tribeId].diplomaticBonds) {
+                                            sim.tribes.tribes[targetNest.tribeId].diplomaticBonds = {};
+                                        }
                                         
                                         // SFX when bond forms (crosses threshold)
                                         if (currentBond < 20 && newBond >= 20) {
@@ -10740,7 +10791,7 @@
             }
 
             getRigidBondCount() {
-                return Object.values(this.rigidBonds).filter(Boolean).length;
+                return (this.rigidBonds ? Object.values(this.rigidBonds).filter(Boolean).length : 0);
             }
 
             getGroupSynergies(group) {
@@ -10752,7 +10803,11 @@
                     combatFocus: 1,
                     defenseFocus: 1
                 };
-                group.forEach(member => {
+                // PERFORMANCE: Limit group size for synergy calculations
+                let maxMembersForSynergy = 30;
+                let membersToProcess = group.length > maxMembersForSynergy ? group.slice(0, maxMembersForSynergy) : group;
+                
+                membersToProcess.forEach(member => {
                     if (!member || member.dead) return;
                     switch(member.role) {
                         case 'Scout':
@@ -10790,6 +10845,24 @@
             
             getGroupStrength(group) {
                 group = group || this.getCachedBondedGroup();
+                // PERFORMANCE: For large groups, use approximate calculation
+                if (group.length > 30) {
+                    // Sample-based calculation for large groups
+                    let sampleSize = Math.min(30, group.length);
+                    let sample = group.slice(0, sampleSize);
+                    let avgStrength = 0;
+                    let count = 0;
+                    for (let member of sample) {
+                        if (!member || member.dead) continue;
+                        avgStrength += member.health + member.energy + (member.structureStability || 0) * 0.6 + member.radius * 2;
+                        count++;
+                    }
+                    if (count > 0) {
+                        avgStrength = avgStrength / count;
+                        return avgStrength * group.length + group.length * 25;
+                    }
+                }
+                
                 let strength = 0;
                 for (let member of group) {
                     if (!member || member.dead) continue;
@@ -11553,8 +11626,33 @@
                 ctx.translate(this.pos.x, this.pos.y);
 
                 // Draw Bond Line - different styles for rigid vs elastic bonds
+                // PERFORMANCE: Limit bond drawing for large groups to prevent lag
                 // Handle torus wrapping for bonds that cross screen edges
-                this.partners.forEach(p => {
+                let maxBondsToDraw = 20; // Limit bonds drawn per agent
+                let bondsDrawn = 0;
+                
+                // For large groups, only draw bonds to closest partners
+                let partnersToDraw = this.partners;
+                if (this.partners.length > maxBondsToDraw) {
+                    // Sort by distance and only draw closest bonds
+                    partnersToDraw = [...this.partners]
+                        .filter(p => p && !p.dead)
+                        .map(p => ({
+                            partner: p,
+                            dist: Vector.distTorus(this.pos, p.pos, sim.width, sim.height)
+                        }))
+                        .sort((a, b) => a.dist - b.dist)
+                        .slice(0, maxBondsToDraw)
+                        .map(item => item.partner);
+                }
+                
+                partnersToDraw.forEach(p => {
+                    if (!p || p.dead || bondsDrawn >= maxBondsToDraw) return;
+                    
+                    // Skip drawing bonds that are very long (likely not visible)
+                    let bondDist = Vector.distTorus(this.pos, p.pos, sim.width, sim.height);
+                    if (bondDist > 500) return; // Skip very long bonds
+                    
                     ctx.save();
                     ctx.beginPath();
                     ctx.moveTo(0, 0);
@@ -11565,7 +11663,7 @@
                     ctx.lineTo(torusDir.x, torusDir.y);
                     
                     // Visual distinction: rigid bonds are red/orange and thicker
-                    let isRigid = this.rigidBonds[p.id];
+                    let isRigid = (this.rigidBonds && this.rigidBonds[p.id]) || false;
                     if (isRigid) {
                         ctx.strokeStyle = 'rgba(255, 107, 107, 0.8)'; // Red-orange for rigid
                         ctx.lineWidth = 3;
@@ -11575,6 +11673,7 @@
                     }
                     ctx.stroke();
                     ctx.restore();
+                    bondsDrawn++;
                 });
 
                 // Leader Crown
@@ -11829,6 +11928,18 @@
                 this._cachedGroupEntityCount = 0;
                 this._lastGroupEntityCountUpdate = 0;
                 this._cachedTribeAgentCounts = {}; // Map of tribeId -> {count, lastUpdate}
+                
+                // PERFORMANCE: Pre-compute active bonds to avoid O(N²) loop in drawing
+                this._activeBonds = []; // Array of {n1, n2, type, strength, tribe1, tribe2}
+                this._lastBondUpdateFrame = -1;
+                
+                // PERFORMANCE: Particle throttling to prevent explosion during battles
+                this._particlesCreatedThisFrame = 0;
+                this._maxParticlesPerFrame = 20; // Limit particles created per frame
+                
+                // PERFORMANCE: Particle throttling to prevent explosion during battles
+                this._particlesCreatedThisFrame = 0;
+                this._maxParticlesPerFrame = 20; // Limit particles created per frame
 
                 // CAMERA/DRAG SYSTEM - Click and drag with momentum glide
                 this.cameraX = 0;
@@ -11987,6 +12098,47 @@
                 }
             }
             
+            _updateActiveBonds() {
+                // Pre-compute active bonds (only bonds > threshold) to avoid O(N²) in drawing loop
+                this._activeBonds = [];
+                
+                for(let tid in this.tribes.tribes) {
+                    for(let otherId in this.tribes.tribes) {
+                        if (tid < otherId) { // Check each pair only once
+                            let tribe1 = this.tribes.tribes[tid];
+                            let tribe2 = this.tribes.tribes[otherId];
+                            let n1 = this.tribes.nests.find(n => n.tribeId == tid);
+                            let n2 = this.tribes.nests.find(n => n.tribeId == otherId);
+                            
+                            if (!n1 || !n2) continue;
+                            
+                            // Check for war
+                            let isAtWar = (tribe1.atWarWith && tribe1.atWarWith[otherId] === true) || 
+                                         (tribe2.atWarWith && tribe2.atWarWith[tid] === true);
+                            
+                            if (isAtWar) {
+                                this._activeBonds.push({n1, n2, type: 'war', strength: 100, tribe1, tribe2});
+                                continue; // War takes priority
+                            }
+                            
+                            // Check diplomatic bond
+                            let dipBond = (tribe1.diplomaticBonds && tribe1.diplomaticBonds[otherId]) || 0;
+                            if (dipBond > 5) {
+                                this._activeBonds.push({n1, n2, type: 'diplomatic', strength: dipBond, tribe1, tribe2});
+                            }
+                            
+                            // Check commercial bond
+                            let comBond = (tribe1.commercialBonds && tribe1.commercialBonds[otherId]) || 0;
+                            if (comBond > 5) {
+                                this._activeBonds.push({n1, n2, type: 'commercial', strength: comBond, tribe1, tribe2});
+                            }
+                        }
+                    }
+                }
+                
+                this._lastBondUpdateFrame = this.frame;
+            }
+            
             _cleanupAfterLargeDieOff() {
                 // Aggressive cleanup after large die-offs (similar to war cleanup)
                 // Reset frame history to allow performance recovery
@@ -11997,54 +12149,27 @@
                 if (this.updateStaggerSize > 8) {
                     this.updateStaggerSize = Math.max(4, this.updateStaggerSize - 2);
                 }
-                // AGGRESSIVE CLEANUP: Force cleanup of dead agents and other entities
-                // Remove dead agents immediately
-                let agentsBefore = this.agents.length;
-                this.agents = this.agents.filter(a => !a.dead);
-                let agentsRemoved = agentsBefore - this.agents.length;
+                // PERFORMANCE: Lightweight cleanup - avoid expensive filtering that blocks rendering
+                // Dead agents are already filtered in main loop, so skip here
+                // Only do quick capping if arrays are extremely large to prevent memory issues
                 
-                // Remove inactive resources (including dead blocks)
-                let resourcesBefore = this.resources.length;
-                this.resources = this.resources.filter(r => {
-                    if (!r.active) return false;
-                    // Also remove blocks that have decayed (life <= 0)
-                    if (r.type === 'BLOCK' && r.life !== undefined && r.life <= 0) return false;
-                    return true;
-                });
-                let resourcesRemoved = resourcesBefore - this.resources.length;
-                
-                // Remove expired particles
-                let particlesBefore = this.particles.length;
-                this.particles = this.particles.filter(p => p.life > 0);
-                let particlesRemoved = particlesBefore - this.particles.length;
-                
-                // Projectiles removed - no cleanup needed
-                let projectilesRemoved = 0;
-                
-                // Remove expired plagues
-                let plaguesBefore = this.plagues.length;
-                this.plagues = this.plagues.filter(p => p.life > 0);
-                let plaguesRemoved = plaguesBefore - this.plagues.length;
-                
-                // Remove expired spawn points
-                let spawnPointsBefore = this.spawnPoints.length;
-                this.spawnPoints = this.spawnPoints.filter(sp => sp.life > 0);
-                let spawnPointsRemoved = spawnPointsBefore - this.spawnPoints.length;
-                
-                // AGGRESSIVE CAPPING: Cap arrays more aggressively to reduce memory overhead
-                if (this.particles.length > 200) this.particles = this.particles.slice(-200); // Reduced from 300
-                // Projectiles removed - no capping needed
-                if (this.plagues.length > 15) this.plagues = this.plagues.slice(-15); // Reduced from 20
-                if (this.spawnPoints.length > 30) this.spawnPoints = this.spawnPoints.slice(-30); // Reduced from 50
-                if (this.resources.length > CONFIG.maxRes) {
-                    // More aggressive: cap at maxRes instead of 1.5x
-                    this.resources = this.resources.slice(-CONFIG.maxRes);
+                // Quick cap check - only if arrays are very large (avoid expensive filtering)
+                // This prevents memory explosion without blocking the render thread
+                if (this.particles.length > 500) {
+                    this.particles = this.particles.slice(-300); // Quick cap without filtering
+                }
+                if (this.resources.length > CONFIG.maxRes * 2) {
+                    this.resources = this.resources.slice(-CONFIG.maxRes); // Quick cap
+                }
+                if (this.plagues.length > 30) {
+                    this.plagues = this.plagues.slice(-15); // Quick cap
+                }
+                if (this.spawnPoints.length > 60) {
+                    this.spawnPoints = this.spawnPoints.slice(-30); // Quick cap
                 }
                 
-                // Log cleanup if significant
-                if (agentsRemoved > 0 || resourcesRemoved > 10 || particlesRemoved > 50) {
-                    console.log(`🧹 Aggressive cleanup: ${agentsRemoved} agents, ${resourcesRemoved} resources, ${particlesRemoved} particles, ${projectilesRemoved} projectiles, ${plaguesRemoved} plagues, ${spawnPointsRemoved} spawn points`);
-                }
+                // Detailed filtering is handled by regular periodic cleanup (every 200 frames)
+                // This lightweight cleanup just prevents memory explosion without blocking
             }
             
             _updateSpatialGrid() {
@@ -12258,7 +12383,7 @@
                 } else if (this.actionMode === 'boon') {
                     if(btnBoon) btnBoon.classList.add('active-tool');
                     if (agentSelect) agentSelect.value = '';
-                    alertBox.textContent = "⚠️ PLACE BOON MODE - CLICK ON CANVAS TO PLACE 50 RESOURCES ⚠️";
+                    alertBox.textContent = "⚠️ PLACE BOON MODE - CLICK ON CANVAS TO PLACE 50 RESOURCES + 30 FOOD ⚠️";
                     alertBox.classList.remove('hidden');
                 } else if (this.actionMode === 'infect') {
                     btnInfect.classList.add('active-tool');
@@ -12695,9 +12820,10 @@
                     return;
                 }
 
-                // BOON TOOL - Place 50 random resources (not food)
+                // BOON TOOL - Place lots of resources including food
                 if (this.actionMode === 'boon') {
                     const resourceTypes = ['MAT', 'STIM', 'SEED', 'TREASURE', 'HERB', 'ORE', 'RELIC'];
+                    // Place 50 random resources (not food)
                     for (let i = 0; i < 50; i++) {
                         let angle = (i / 50) * Math.PI * 2;
                         let offset = 30 + Math.random() * 40;
@@ -12706,8 +12832,16 @@
                         let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
                         this.spawnResource(null, spawnX, spawnY, resourceType);
                     }
+                    // Place lots of food (30 food resources)
+                    for (let i = 0; i < 30; i++) {
+                        let angle = (i / 30) * Math.PI * 2;
+                        let offset = 20 + Math.random() * 50;
+                        let spawnX = x + Math.cos(angle) * offset;
+                        let spawnY = y + Math.sin(angle) * offset;
+                        this.spawnResource(null, spawnX, spawnY, 'FOOD');
+                    }
                     this.particles.push(new Particle(x, y, '#fbbf24', 'star'));
-                    this.setStatusMessage(`💰 BOON PLACED: 50 resources scattered at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
+                    this.setStatusMessage(`💰 BOON PLACED: 50 resources + 30 food scattered at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
                     this.setTool(null);
                     return;
                 }
@@ -13111,6 +13245,15 @@
             loop() {
                 if (!this.running) return;
                 
+                // PERFORMANCE: Reset particle creation counter each frame
+                this._particlesCreatedThisFrame = 0;
+                
+                // PERFORMANCE: Quick particle cap check during battles (every frame to prevent lag)
+                if (this.particles.length > 150 && this.agents.length > 80) {
+                    // During battles, aggressively cap particles to prevent lag
+                    this.particles = this.particles.slice(-100);
+                }
+                
                 // Update camera with momentum/glide effect (only when not dragging)
                 if (!this.isDragging) {
                     // Apply camera velocity to position
@@ -13131,13 +13274,27 @@
                 soundThrottle.battleSoundPlayedThisFrame = false;
 
                 // Resource spawning with separate food spawn rate
+                // Allow spawning up to maxRes, but be more generous
                 if (this.resources.length < CONFIG.maxRes) {
-                    if (Math.random() < CONFIG.foodSpawnRate) {
+                    // Food spawn - spawn multiple times if rate is high
+                    let foodSpawnChance = CONFIG.foodSpawnRate;
+                    if (foodSpawnChance >= 1.0) {
+                        // If rate >= 1.0, spawn guaranteed + chance for extra
+                        this.spawnResource(null, null, null, 'FOOD');
+                        foodSpawnChance -= 1.0;
+                    }
+                    if (Math.random() < foodSpawnChance) {
                         this.spawnResource(null, null, null, 'FOOD');
                     }
-                    if (Math.random() < CONFIG.resSpawnRate) {
-                    this.spawnResource(null, null, null);
-                }
+                    // Non-food resources - resSpawnRate can be > 1.0 for guaranteed spawn
+                    let resSpawnChance = CONFIG.resSpawnRate;
+                    if (resSpawnChance >= 1.0) {
+                        this.spawnResource(null, null, null);
+                        resSpawnChance -= 1.0;
+                    }
+                    if (Math.random() < resSpawnChance) {
+                        this.spawnResource(null, null, null);
+                    }
                 }
                 
                 // Food spawn near nests (reduced rate and shorter lifespan)
@@ -13696,20 +13853,16 @@
                 }
                 // CRITICAL: Always clean up particles every frame, even if not updated
                 // This prevents accumulation when update interval is > 1
-                // More aggressive capping during intense battles
+                // PERFORMANCE: Quick particle capping - skip expensive filtering, use slice
+                // Detailed filtering happens in periodic cleanup (every 200 frames)
                 if (this.particles.length > 300) {
-                    // If too many particles, aggressively clean up and cap at 200 (reduced from 300)
-                    this.particles = this.particles.filter(p => p.life > 0.1);
-                    if (this.particles.length > 200) {
-                        // Keep only the newest particles (last 200)
-                        this.particles = this.particles.slice(-200);
-                    }
+                    // Quick cap without filtering during battles
+                    this.particles = this.particles.slice(-200);
                 } else if (this.particles.length > 200) {
-                    // Moderate cleanup when approaching limit
-                    this.particles = this.particles.filter(p => p.life > 0.2);
-                } else {
-                    this.particles = this.particles.filter(p => p.life > 0);
+                    // Quick cap when approaching limit
+                    this.particles = this.particles.slice(-200);
                 }
+                // Skip filtering every frame - particles will be filtered in periodic cleanup
                 
                 // PERFORMANCE: Clean up old birth records (keep only last 180 frames = 3 seconds)
                 if (this.recentBirths) {
@@ -13718,21 +13871,27 @@
                 
                 // GRAZER CLEANUP: Remove dead grazers periodically to prevent accumulation
                 if (this.frame % 300 === 0) { // Every 300 frames (5 seconds at 60fps)
-                    let grazerCount = this.agents.filter(a => a.isGrazer && !a.dead).length;
-                    if (grazerCount > 200) { // If too many grazers, remove dead ones and cap population
-                        // Remove dead grazers
-                        this.agents = this.agents.filter(a => !(a.isGrazer && a.dead));
-                        
-                        // If still too many, remove oldest grazers (by age)
-                        let livingGrazers = this.agents.filter(a => a.isGrazer && !a.dead);
-                        if (livingGrazers.length > 150) {
-                            // Sort by age (oldest first) and remove excess
-                            livingGrazers.sort((a, b) => b.age - a.age);
-                            let toRemove = livingGrazers.slice(150);
-                            for (let grazer of toRemove) {
-                                grazer.dead = true;
+                    // PERFORMANCE: Lightweight grazer count check - only do expensive cleanup if needed
+                    let grazerCount = 0;
+                    for (let a of this.agents) {
+                        if (a.isGrazer && !a.dead) grazerCount++;
+                    }
+                    
+                    if (grazerCount > 200) { // If too many grazers, cap population
+                        // PERFORMANCE: Quick cap without expensive filtering - just mark oldest for removal
+                        let grazerAges = [];
+                        for (let a of this.agents) {
+                            if (a.isGrazer && !a.dead) {
+                                grazerAges.push({agent: a, age: a.age});
                             }
-                            this.agents = this.agents.filter(a => !a.dead);
+                        }
+                        if (grazerAges.length > 150) {
+                            // Quick partial sort - only sort what we need to remove
+                            grazerAges.sort((a, b) => b.age - a.age);
+                            let toRemove = grazerAges.slice(150);
+                            for (let item of toRemove) {
+                                item.agent.dead = true; // Mark for removal, will be filtered in main loop
+                            }
                         }
                     }
                 }
@@ -13794,6 +13953,11 @@
                 
                 // NEST UPDATE
                 this.tribes.nests.forEach(n => n.update());
+                
+                // PERFORMANCE: Update active bonds cache every 10 frames (bonds don't change often)
+                if (this.frame % 10 === 0) {
+                    this._updateActiveBonds();
+                }
                 
                 // Track nest count before filtering to detect nest deaths
                 let nestsBefore = this.tribes.nests.length;
@@ -14890,30 +15054,52 @@
 
                 // AGGRESSIVE CLEANUP: Remove dead agents immediately (every frame)
                 let agentsBeforeFilter = this.agents.length;
-                this.agents = this.agents.filter(a => {
+                // PERFORMANCE: Separate dead agent processing from filtering to avoid expensive work in filter
+                let deadAgents = [];
+                let aliveAgents = [];
+                
+                for (let a of this.agents) {
                     if (a.dead) {
-                        let drops = Math.floor(a.radius / 5);
-                        if(a.role === 'Monster') drops = 30; 
-                        for(let i=0; i<drops; i++) {
-                        let r = new Resource(a.pos.x + (Math.random()*40-20), a.pos.y + (Math.random()*40-20), 'FOOD', false, a.tribeId);
-                            this.resources.push(r);
-                        }
-                        // Skulls
-                        sim.particles.push(new Particle(a.pos.x, a.pos.y, '#fff', 'skull'));
-                        return false;
+                        deadAgents.push(a);
+                    } else {
+                        aliveAgents.push(a);
                     }
-                    return true;
-                });
+                }
+                
+                // Process dead agents (create resources/particles) - but limit to prevent explosion
+                let processedDead = 0;
+                for (let a of deadAgents) {
+                    if (processedDead++ > 20) break; // Limit processing to prevent lag
+                    
+                    let drops = Math.floor(a.radius / 5);
+                    if(a.role === 'Monster') drops = 30; 
+                    // Limit drops to prevent resource explosion
+                    drops = Math.min(drops, 10);
+                    for(let i=0; i<drops; i++) {
+                        let r = new Resource(a.pos.x + (Math.random()*40-20), a.pos.y + (Math.random()*40-20), 'FOOD', false, a.tribeId);
+                        this.resources.push(r);
+                    }
+                    // Skulls - use throttled particle creation
+                    if (this._particlesCreatedThisFrame < this._maxParticlesPerFrame) {
+                        sim.particles.push(new Particle(a.pos.x, a.pos.y, '#fff', 'skull'));
+                        this._particlesCreatedThisFrame++;
+                    }
+                }
+                
+                this.agents = aliveAgents;
                 let agentsAfterFilter = this.agents.length;
                 
-                // AGGRESSIVE CLEANUP: Remove inactive resources and dead blocks every frame
+                // PERFORMANCE: Lightweight resource cleanup - only filter if count is high
                 let resourcesBeforeFilter = this.resources.length;
-                this.resources = this.resources.filter(r => {
-                    if (!r.active) return false;
-                    // Remove blocks that have decayed (life <= 0)
-                    if (r.type === 'BLOCK' && r.life !== undefined && r.life <= 0) return false;
-                    return true;
-                });
+                if (this.resources.length > CONFIG.maxRes * 1.2) {
+                    // Only do expensive filtering if resources are accumulating
+                    this.resources = this.resources.filter(r => {
+                        if (!r.active) return false;
+                        // Remove blocks that have decayed (life <= 0)
+                        if (r.type === 'BLOCK' && r.life !== undefined && r.life <= 0) return false;
+                        return true;
+                    });
+                }
                 let resourcesAfterFilter = this.resources.length;
                 
                 // Aggressive cleanup after large die-off detected here (more than 20% of agents died - more sensitive)
@@ -14991,8 +15177,19 @@
                     this.plagues = this.plagues.filter(p => p.life > 0);
                     this.spawnPoints = this.spawnPoints.filter(sp => sp.life > 0);
                     
-                    // Aggressive capping
-                    if (this.particles.length > 200) this.particles = this.particles.slice(-200);
+                    // Aggressive capping - more aggressive during battles
+                    if (this.particles.length > 200) {
+                        // During intense periods, cap more aggressively
+                        if (this.agents.length > 100) {
+                            this.particles = this.particles.slice(-150); // Lower cap during battles
+                        } else {
+                            this.particles = this.particles.slice(-200);
+                        }
+                    }
+                    // Also cap particles more frequently during battles (every 50 frames instead of 200)
+                    if (this.frame % 50 === 0 && this.particles.length > 100 && this.agents.length > 80) {
+                        this.particles = this.particles.slice(-100); // Quick cap during battles
+                    }
                     // Projectiles removed - no capping needed
                     if (this.plagues.length > 15) this.plagues = this.plagues.slice(-15);
                     if (this.spawnPoints.length > 30) this.spawnPoints = this.spawnPoints.slice(-30);
@@ -15093,22 +15290,31 @@
                         });
                         
                         // DRAW DIPLOMATIC, COMMERCIAL, AND WAR BONDS BETWEEN NESTS
-                        // CRITICAL: Always draw bonds every frame - they don't change often and flickering is jarring
-                const ctx = this.ctx;
-                for(let tid in this.tribes.tribes) {
-                     for(let otherId in this.tribes.tribes) {
-                         if (tid < otherId) { // Draw each bond only once
-                             let tribe1 = this.tribes.tribes[tid];
-                             let tribe2 = this.tribes.tribes[otherId];
-                             let n1 = this.tribes.nests.find(n => n.tribeId == tid);
-                             let n2 = this.tribes.nests.find(n => n.tribeId == otherId);
-                             
-                             if (n1 && n2) {
-                                // Check if at war (draw war bonds first, they should be on top)
-                                let isAtWar = (tribe1.atWarWith && tribe1.atWarWith[otherId] === true) || 
-                                             (tribe2.atWarWith && tribe2.atWarWith[tid] === true);
-                                
-                                if (isAtWar) {
+                        // PERFORMANCE: Use pre-computed active bonds list instead of O(N²) nested loop
+                        const ctx = this.ctx;
+                        
+                        // Viewport bounds for culling (with margin for bonds that extend beyond viewport)
+                        const viewMargin = Math.max(viewWidth, viewHeight) * 0.2; // 20% margin
+                        const viewLeftWithMargin = viewLeft - viewMargin;
+                        const viewRightWithMargin = viewRight + viewMargin;
+                        const viewTopWithMargin = viewTop - viewMargin;
+                        const viewBottomWithMargin = viewBottom + viewMargin;
+                        
+                        // Draw only active bonds that are in or near viewport
+                        for (let bond of (this._activeBonds || [])) {
+                            let n1 = bond.n1;
+                            let n2 = bond.n2;
+                            
+                            // Viewport culling: only draw if at least one nest is in viewport (with margin)
+                            let n1InView = (n1.pos.x >= viewLeftWithMargin && n1.pos.x <= viewRightWithMargin &&
+                                           n1.pos.y >= viewTopWithMargin && n1.pos.y <= viewBottomWithMargin);
+                            let n2InView = (n2.pos.x >= viewLeftWithMargin && n2.pos.x <= viewRightWithMargin &&
+                                           n2.pos.y >= viewTopWithMargin && n2.pos.y <= viewBottomWithMargin);
+                            
+                            if (!n1InView && !n2InView) continue; // Skip bonds completely outside viewport
+                            
+                            // Draw based on bond type
+                            if (bond.type === 'war') {
                                     // DRAW WAR BOND - Angry red bond with animated particles going both ways
                                     // Use torus distance and direction for proper wrapping
                                     let bondLength = Vector.distTorus(n1.pos, n2.pos, this.width, this.height);
@@ -15171,12 +15377,8 @@
                                         }
                                     }
                                     
-                                    continue; // Skip other bonds if at war (war bond takes priority)
-                                }
-                                
-                                // Draw Diplomatic Bond (blue striped with purple dots) - LOWERED threshold from 20 to 5
-                                let dipBond = tribe1.diplomaticBonds[otherId] || 0;
-                                if (dipBond > 5) {
+                            } else if (bond.type === 'diplomatic') {
+                                let dipBond = bond.strength;
                                     // Use torus distance and direction for proper wrapping
                                     let bondLength = Vector.distTorus(n1.pos, n2.pos, this.width, this.height);
                                     let torusDir = Vector.subTorus(n1.pos, n2.pos, this.width, this.height);
@@ -15246,11 +15448,8 @@
                                         ctx.textAlign = 'center';
                                         ctx.fillText(Math.floor(dipBond), midX, midY - 5);
                                     }
-                                }
-                                
-                                // Draw Commercial Bond (green striped with gold money dots) - LOWERED threshold from 20 to 5
-                                let comBond = tribe1.commercialBonds[otherId] || 0;
-                                if (comBond > 5) {
+                            } else if (bond.type === 'commercial') {
+                                let comBond = bond.strength;
                                     // Use torus distance and direction for proper wrapping
                                     let bondLength = Vector.distTorus(n1.pos, n2.pos, this.width, this.height);
                                     let torusDir = Vector.subTorus(n1.pos, n2.pos, this.width, this.height);
@@ -15320,11 +15519,8 @@
                                         ctx.textAlign = 'center';
                                         ctx.fillText(Math.floor(comBond), midX, midY + 10);
                                     }
-                                }
-                             }
-                         }
-                     }
-                }
+                            }
+                        }
 
                         // DRAW SPAWN POINT CIRCLES - Large colored circles at nest centers (tribe color)
                         // Drawn AFTER bonds so they appear on top (z-order: top)
@@ -15567,17 +15763,25 @@
                     // PERFORMANCE: Periodic cleanup every 300 frames (5 seconds at 60fps)
                     if (this.frame % 300 === 0) {
                         // Aggressive cleanup after intense periods
-                        let deadAgents = this.agents.filter(a => a.dead).length;
-                        let inactiveResources = this.resources.filter(r => !r.active).length;
+                        // PERFORMANCE: Quick count check without expensive filtering
+                        let deadCount = 0;
+                        let inactiveCount = 0;
+                        for (let a of this.agents) {
+                            if (a.dead) deadCount++;
+                        }
+                        for (let r of this.resources) {
+                            if (!r.active) inactiveCount++;
+                        }
                         
                         // If there are many dead entities, trigger cleanup
-                        if (deadAgents > 50 || inactiveResources > 100) {
+                        if (deadCount > 50 || inactiveCount > 100) {
                             this._cleanupAfterLargeDieOff();
                         }
                         
-                        // Cleanup particles, projectiles, plagues periodically
+                        // Cleanup particles - use quick slice instead of filter if possible
                         if (this.particles.length > 200) {
-                            this.particles = this.particles.filter(p => p.life > 0).slice(-200);
+                            // Quick cap without filtering - particles will be filtered in periodic cleanup
+                            this.particles = this.particles.slice(-200);
                         }
                         if (this.projectiles.length > 50) {
                             // Projectiles removed - no cleanup needed
