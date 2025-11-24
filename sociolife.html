@@ -1176,21 +1176,41 @@
             agentSpawnRates: {
                 'Scout': 0.02,
                 'Gatherer': 0.03,
-                'Builder': 0.015,
-                'Soldier': 0.01,
-                'Miner': 0.008,
-                'Raider': 0.005,
-                'Farmer': 0.025,
+                'Builder': 0.02,
+                'Soldier': 0.03,
+                'Miner': 0.01,
+                'Raider': 0.01,
+                'Farmer': 0.02,
                 'Botanist': 0.01,
-                'Merchant': 0.005,
-                'Diplomat': 0.003,
-                'Guardian': 0.008,
-                'Artisan': 0.006,
-                'Teacher': 0.004,
-                'Scientist': 0.003,
-                'Spy': 0.004,
-                'Technologist': 0.003,
+                'Merchant': 0.01,
+                'Diplomat': 0.01,
+                'Guardian': 0.02,
+                'Artisan': 0.01,
+                'Teacher': 0.01,
+                'Scientist': 0.01,
+                'Spy': 0.01,
+                'Technologist': 0.02,
                 'Garbage Collector': 0.002
+            },
+            // Maximum agents per role type (prevents overpopulation)
+            agentRoleCaps: {
+                'Scout': 15,
+                'Gatherer': 20,
+                'Builder': 15,
+                'Soldier': 20,
+                'Miner': 12,
+                'Raider': 10,
+                'Farmer': 18,
+                'Botanist': 12,
+                'Merchant': 10,
+                'Diplomat': 8,
+                'Guardian': 12,
+                'Artisan': 10,
+                'Teacher': 8,
+                'Scientist': 8,
+                'Spy': 8,
+                'Technologist': 10,
+                'Garbage Collector': 5
             },
             // Nest drift rates
             nestBaseDriftRate: 1.8,
@@ -1321,6 +1341,153 @@
 
         let CONFIG = { ...DEFAULT_CONFIG };
 
+        // ===== CENTRALIZED AGENT SPAWNING HELPER FUNCTIONS =====
+        
+        /**
+         * Get the required tech tier for a role
+         * @param {string} role - The role name
+         * @returns {number} Required tech tier (0, 1, or 2)
+         */
+        function getRequiredTechTier(role) {
+            // Tier 1 roles
+            if (role === 'Merchant' || role === 'Diplomat' || role === 'Scientist' || role === 'Spy' || 
+                role === 'Artisan' || role === 'Guardian' || role === 'Teacher') {
+                return 1;
+            }
+            // Tier 2 roles
+            if (role === 'Raider' || role === 'Technologist') {
+                return 2;
+            }
+            // All other roles are tier 0 (basic roles)
+            return 0;
+        }
+
+        /**
+         * Check if a role is a basic role (always available regardless of tech tier)
+         * @param {string} role - The role name
+         * @returns {boolean} True if basic role
+         */
+        function isBasicRole(role) {
+            return role === 'Soldier' || role === 'Gatherer' || role === 'Scout' || 
+                   role === 'Builder' || role === 'Farmer' || role === 'Miner' || 
+                   role === 'Botanist' || role === 'Garbage Collector';
+        }
+
+        /**
+         * Get all available roles for a tribe based on tech tier
+         * @param {number} techTier - The tribe's tech tier
+         * @returns {string[]} Array of available role names
+         */
+        function getAvailableRoles(techTier) {
+            let availableRoles = [];
+            if (typeof CONFIG.agentSpawnRates === 'object') {
+                for (let role in CONFIG.agentSpawnRates) {
+                    let requiredTier = getRequiredTechTier(role);
+                    // Include role if tech tier is met OR if it's a basic role
+                    if (techTier >= requiredTier || isBasicRole(role)) {
+                        availableRoles.push(role);
+                    }
+                }
+            }
+            // Always include basic roles as fallback
+            if (availableRoles.length === 0) {
+                availableRoles = ['Gatherer', 'Scout', 'Builder', 'Farmer', 'Soldier'];
+            }
+            return availableRoles;
+        }
+
+        /**
+         * Get current agent counts by role for a tribe
+         * @param {Array} agents - All agents in the simulation
+         * @param {number} tribeId - The tribe ID
+         * @returns {Object} Object mapping role names to counts
+         */
+        function getRoleCounts(agents, tribeId) {
+            let counts = {};
+            if (agents) {
+                agents.forEach(a => {
+                    if (a.tribeId === tribeId && !a.dead && a.role) {
+                        counts[a.role] = (counts[a.role] || 0) + 1;
+                    }
+                });
+            }
+            return counts;
+        }
+
+        /**
+         * Weighted random selection of a role based on spawn rates and current counts
+         * Respects role caps and spawn rates
+         * @param {string[]} availableRoles - Roles available to spawn
+         * @param {Object} currentCounts - Current agent counts by role
+         * @param {Object} roleCaps - Maximum agents per role
+         * @param {Object} spawnRates - Base spawn rates for each role
+         * @param {Object} modifiers - Optional modifiers (war, economic, etc.)
+         * @returns {string|null} Selected role name or null if none available
+         */
+        function weightedRandomRole(availableRoles, currentCounts, roleCaps, spawnRates, modifiers = {}) {
+            if (!availableRoles || availableRoles.length === 0) return null;
+
+            // Build weighted array
+            let weights = [];
+            let roles = [];
+
+            for (let role of availableRoles) {
+                // Check if role is at cap
+                let cap = roleCaps[role] || Infinity;
+                let current = currentCounts[role] || 0;
+                if (current >= cap) continue; // Skip roles at cap
+
+                // Base weight from spawn rate
+                let weight = spawnRates[role] || 0.01;
+
+                // Apply modifiers
+                if (modifiers.war && (role === 'Soldier' || role === 'Raider' || role === 'Guardian')) {
+                    weight *= 3; // 3x weight for fighting roles during war
+                }
+                if (modifiers.economic && (role === 'Merchant' || role === 'Artisan' || role === 'Miner' || role === 'Builder' || role === 'Farmer')) {
+                    weight *= 2; // 2x weight for money roles during economic bonds
+                }
+                if (modifiers.hasTeachersScientists && role === 'Technologist') {
+                    weight *= 3; // 3x weight for Technologist if Teachers/Scientists exist
+                }
+                if (modifiers.hasNearbyBlocks && role === 'Builder') {
+                    weight *= 3; // 3x weight for Builder if blocks nearby
+                }
+
+                // Reduce weight if role is over target (but not at cap)
+                let target = modifiers.targetPerRole || 3;
+                if (current > target) {
+                    weight *= 0.5; // Reduce weight by 50% if over target
+                } else if (current < target) {
+                    weight *= (1 + (target - current) * 0.2); // Increase weight if under target
+                }
+
+                weights.push(weight);
+                roles.push(role);
+            }
+
+            if (roles.length === 0) return null;
+
+            // Weighted random selection
+            let totalWeight = weights.reduce((sum, w) => sum + w, 0);
+            if (totalWeight === 0) {
+                // Fallback to uniform random if all weights are 0
+                return roles[Math.floor(Math.random() * roles.length)];
+            }
+
+            let random = Math.random() * totalWeight;
+            let cumulative = 0;
+            for (let i = 0; i < weights.length; i++) {
+                cumulative += weights[i];
+                if (random <= cumulative) {
+                    return roles[i];
+                }
+            }
+
+            // Fallback
+            return roles[roles.length - 1];
+        }
+
         function weightedResourceEnergy(type) {
             // RESOURCE VALUE SCALE: From least (food) to most (treasure)
             // Treasure is super valuable, with a clear progression
@@ -1420,6 +1587,40 @@
                 this.backgroundGain = null; // Gain node for volume control
                 this.backgroundRunning = false;
                 this.nestHeartbeats = new Map(); // Map of nestId -> {osc, gain, pulseGain}
+                
+                // CENTRALIZED SOUND CONTROL - Enable/disable individual sound types from one place
+                // All sound calls throughout the codebase go through _playSound() which checks this config
+                // Set to false to disable a sound type, true to enable it
+                // You can also use helper methods: setSoundEnabled(type, enabled), setSoundsEnabled([types], enabled)
+                // disableAllSounds(), enableAllSounds()
+                this.soundEnabled = {
+                    'attack': false,
+                    'birth': false,
+                    'death': false,
+                    'eat': false,
+                    'heal': false,
+                    'diplomacy': false,
+                    'jealousy': false,
+                    'merge': false,
+                    'split': false,
+                    'transaction': false,
+                    'link_formed': false,
+                    'link_broken': false,
+                    'spawn': false,
+                    'aquatic': false,
+                    'bloop': false,
+                    'bleep': false,
+                    'water_drop': false,
+                    'bubble': false,
+                    'artisan_tone': false,
+                    'collect': false,
+                    'ranged_attack': false,
+                    'static': false,
+                    'love': false,
+                    'mating': false,
+                    'trade': false,
+                    'bond': false
+                };
             }
             
             enable() {
@@ -1579,13 +1780,18 @@
                 
                 this.backgroundAudio.addEventListener('error', (e) => {
                     console.error('Error loading background music:', e);
-                    console.error('Audio error details:', {
-                        error: this.backgroundAudio.error,
-                        code: this.backgroundAudio.error?.code,
-                        message: this.backgroundAudio.error?.message,
-                        networkState: this.backgroundAudio.networkState,
-                        readyState: this.backgroundAudio.readyState
-                    });
+                    // Check if backgroundAudio still exists and is not null before accessing properties
+                    if (this.backgroundAudio && this.backgroundAudio.error) {
+                        console.error('Audio error details:', {
+                            error: this.backgroundAudio.error,
+                            code: this.backgroundAudio.error?.code,
+                            message: this.backgroundAudio.error?.message,
+                            networkState: this.backgroundAudio.networkState,
+                            readyState: this.backgroundAudio.readyState
+                        });
+                    } else {
+                        console.error('Audio element is null or error property unavailable');
+                    }
                     this.backgroundRunning = false;
                 });
                 
@@ -1771,6 +1977,22 @@
             
             _playSound(type, frequency = 440, duration = 0.1, volume = 1.0) {
                 if (!this.enabled || !this.initialized || CONFIG.sfxVolume === 0) return;
+                
+                // CENTRALIZED SOUND CONTROL - Check if this sound type is enabled
+                // If not in the config, default to disabled (safe default)
+                if (this.soundEnabled.hasOwnProperty(type) && !this.soundEnabled[type]) {
+                    return; // Sound type is disabled, don't play
+                }
+                // If sound type is not in config, also disable it (safe default)
+                if (!this.soundEnabled.hasOwnProperty(type)) {
+                    console.warn('Unknown sound type:', type, '- disabling by default');
+                    return;
+                }
+                
+                // Log all sound calls to identify what's being triggered
+                console.log('SOUND CALLED:', type, 'freq:', frequency, 'dur:', duration, 'vol:', volume);
+                
+                // Create audio nodes only if sound is enabled
                 const ctx = this.audioContext;
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -1782,237 +2004,113 @@
                 
                 switch(type) {
                     case 'trade':
-                        // Soft electronic data transfer - audible low frequency sweep
-                        osc.frequency.setValueAtTime(frequency * 0.6, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.9, ctx.currentTime + duration * 0.8);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'bond':
-                        // Soft electronic connection - audible low frequency pulse
-                        osc.frequency.setValueAtTime(frequency * 0.5, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.1, ctx.currentTime + duration * 0.2);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 1.5);
-                        duration *= 1.5;
+                        // TEMPORARILY DISABLED FOR TESTING - was 0.8x duration
+                        return; // Don't play any sound
                         break;
                     
                     case 'attack':
-                        // Soft electronic impact - audible low frequency, gentle
-                        osc.type = 'sine'; // Softer
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.5, ctx.currentTime + duration);
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.05, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-                        duration *= 0.8;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'birth':
-                        // Soft electronic emergence - audible low frequency rise
-                        osc.frequency.setValueAtTime(frequency * 0.4, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.8, ctx.currentTime + duration);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.15);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'death':
-                        // Soft electronic decay - gentle descending tone
-                        osc.frequency.setValueAtTime(frequency * 0.8, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.4, ctx.currentTime + duration * 1.5);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.1, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 1.5);
-                        duration *= 1.5;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'eat':
-                        // Soft electronic consumption - gentle audible blip
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.06, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.5);
-                        duration *= 0.5;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'heal':
-                        // Soft electronic restoration - gentle frequency modulation
-                        osc.frequency.setValueAtTime(frequency * 0.6, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.8, ctx.currentTime + duration/3);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.65, ctx.currentTime + duration*2/3);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'diplomacy':
-                        // Soft electronic communication - gentle audible tone
-                        osc.frequency.setValueAtTime(frequency * 0.6, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.1, ctx.currentTime + duration * 0.15);
-                        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + duration * 1.2);
-                        duration *= 1.2;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'jealousy':
-                        // Soft electronic tension - gentle frequency shift
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.9, ctx.currentTime + duration/2);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.04, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-                        duration *= 0.8;
+                        // TEMPORARILY DISABLED FOR TESTING - was 0.8x duration with modulation
+                        return; // Don't play any sound
                         break;
                     
                     case 'merge':
-                        // Soft electronic fusion - gentle frequency sweep
-                        osc.frequency.setValueAtTime(frequency * 0.5, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.9, ctx.currentTime + duration * 1.5);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.15, ctx.currentTime + duration * 0.2);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 1.5);
-                        duration *= 1.5;
+                        // TEMPORARILY DISABLED FOR TESTING - was 0.6x duration with modulation
+                        return; // Don't play any sound
                         break;
                     
                     case 'split':
-                        // Soft electronic division - gentle frequency drop
-                        osc.frequency.setValueAtTime(frequency * 0.9, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.6, ctx.currentTime + duration/2);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.75, ctx.currentTime + duration);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.15);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        // TEMPORARILY DISABLED FOR TESTING - was full duration with modulation
+                        return; // Don't play any sound
                         break;
                     
                     case 'transaction':
-                        // Soft electronic data pulse - gentle audible blip
-                        osc.frequency.setValueAtTime(frequency * 0.8, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.6);
-                        duration *= 0.6;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'link_formed':
-                        // Soft electronic connection - gentle audible frequency rise
-                        osc.frequency.setValueAtTime(frequency * 0.6, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.9, ctx.currentTime + duration * 0.7);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.7);
-                        duration *= 0.7;
+                        // TEMPORARILY DISABLED FOR TESTING - was 0.7x duration with modulation
+                        return; // Don't play any sound
                         break;
                     
                     case 'link_broken':
-                        // Soft electronic disconnection - gentle frequency drop
-                        osc.frequency.setValueAtTime(frequency * 0.8, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.5, ctx.currentTime + duration * 0.6);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.6);
-                        duration *= 0.6;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'spawn':
-                        // Soft electronic generation - gentle audible blip
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.6);
-                        duration *= 0.6;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'aquatic':
-                        // Soft electronic data flow - gentle frequency sweep
-                        osc.frequency.setValueAtTime(frequency * 0.8, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.6, ctx.currentTime + duration * 0.7);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.06, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.7);
-                        duration *= 0.7;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'bloop':
-                        // Soft electronic pulse - gentle audible frequency
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.55, ctx.currentTime + duration * 0.5);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.5);
-                        duration *= 0.5;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'bleep':
-                        // Soft electronic notification - gentle audible blip
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.06, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.5);
-                        duration *= 0.5;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'water_drop':
-                        // Soft electronic data drop - gentle frequency fall
-                        osc.frequency.setValueAtTime(frequency * 0.8, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.55, ctx.currentTime + duration * 0.4);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.05, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.4);
-                        duration *= 0.4;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'bubble':
-                        // Soft electronic pulse - very soft for love/mating
-                        osc.frequency.setValueAtTime(frequency * 0.6, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.75, ctx.currentTime + duration * 0.5);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.03, ctx.currentTime + duration * 0.15);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.5);
-                        duration *= 0.5;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'artisan_tone':
-                        // Soft electronic crafting - gentle audible frequency pulse
-                        osc.frequency.setValueAtTime(frequency * 0.65, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.8, ctx.currentTime + duration * 0.3);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.1, ctx.currentTime + duration * 0.15);
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.3);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        // TEMPORARILY DISABLED FOR TESTING - was full duration with modulation
+                        return; // Don't play any sound
                         break;
                     
                     case 'collect':
-                        // Soft electronic data collection - gentle frequency sweep
-                        osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(frequency * 0.9, ctx.currentTime + duration * 0.3);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.08, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.6);
-                        duration *= 0.6;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'ranged_attack':
@@ -2021,119 +2119,66 @@
                         break;
                     
                     case 'static':
-                        // Low static buzz for battle/combat - low frequency electrical crackling with delay and reverb
-                        osc.type = 'sine'; // Softer than square
-                        const staticDuration = duration * 0.5; // Longer for buzz
-                        const numChanges = 10; // More changes for buzz effect
-                        const baseFreq = frequency * 0.6; // Audible low base frequency for buzz
-                        
-                        // Low frequency modulation for static buzz
-                        for (let i = 0; i < numChanges; i++) {
-                            const t = (i / numChanges) * staticDuration;
-                            // Low frequency range for buzz
-                            const randomFreq = baseFreq * (0.8 + Math.random() * 0.4); // Audible low frequency variation
-                            osc.frequency.setValueAtTime(randomFreq, ctx.currentTime + t);
-                        }
-                        
-                        // Create delay and reverb chain for static
-                        const staticDelay = ctx.createDelay(2.0);
-                        staticDelay.delayTime.setValueAtTime(0.6, ctx.currentTime); // 600ms delay
-                        const staticDelayGain = ctx.createGain();
-                        staticDelayGain.gain.setValueAtTime(0.35, ctx.currentTime); // Feedback
-                        const staticReverbGain = ctx.createGain();
-                        staticReverbGain.gain.setValueAtTime(0.5, ctx.currentTime); // Reverb mix
-                        
-                        // Connect: osc -> gain -> delay -> feedback -> reverb -> destination
-                        osc.connect(gain);
-                        gain.connect(staticDelay);
-                        staticDelay.connect(staticDelayGain);
-                        staticDelayGain.connect(staticDelay); // Feedback
-                        staticDelayGain.connect(staticReverbGain);
-                        gain.connect(staticReverbGain); // Direct + reverb
-                        staticReverbGain.connect(ctx.destination);
-                        
-                        // Soft volume modulation for buzz - louder so audible
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.15, ctx.currentTime + staticDuration * 0.1);
-                        // Gentle volume variation for buzz
-                        for (let i = 1; i < 4; i++) {
-                            const t = (i / 4) * staticDuration;
-                            const volVariation = 0.12 + Math.random() * 0.05; // More audible variation
-                            gain.gain.setValueAtTime(finalVolume * volVariation, ctx.currentTime + t);
-                        }
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + staticDuration);
-                        duration = staticDuration;
+                        // TEMPORARILY DISABLED FOR TESTING
+                        return; // Don't play any sound
                         break;
                     
                     case 'love':
-                        // Higher but soft tone for love - with lots of delay and reverb
-                        osc.frequency.setValueAtTime(frequency * 1.2, ctx.currentTime); // Higher tone
-                        osc.type = 'sine'; // Soft
-                        
-                        // Create reverb chain: delay with feedback - more reverb
-                        const loveDelay = ctx.createDelay(3.0);
-                        loveDelay.delayTime.setValueAtTime(1.0, ctx.currentTime); // 1.0s delay - longer
-                        const loveDelayGain = ctx.createGain();
-                        loveDelayGain.gain.setValueAtTime(0.5, ctx.currentTime); // More feedback
-                        const loveReverbGain = ctx.createGain();
-                        loveReverbGain.gain.setValueAtTime(0.8, ctx.currentTime); // More reverb mix
-                        
-                        // Connect: osc -> gain -> delay -> feedback -> reverb -> destination
-                        osc.connect(gain);
-                        gain.connect(loveDelay);
-                        loveDelay.connect(loveDelayGain);
-                        loveDelayGain.connect(loveDelay); // Feedback
-                        loveDelayGain.connect(loveReverbGain);
-                        gain.connect(loveReverbGain); // Direct + reverb
-                        loveReverbGain.connect(ctx.destination);
-                        
-                        // Louder so audible, with soft attack
-                        gain.gain.setValueAtTime(0, ctx.currentTime);
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.2);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 1.2);
-                        duration *= 1.2;
+                        // TEMPORARILY DISABLED FOR TESTING - was long with delay/reverb
+                        return; // Don't play any sound
                         break;
                     
                     case 'mating':
-                        // Slow quiet bell tone for mating - with lots of delay and reverb
-                        osc.frequency.setValueAtTime(frequency * 0.9, ctx.currentTime); // Bell-like frequency
-                        osc.type = 'sine'; // Soft bell
-                        
-                        // Create reverb chain: delay with feedback - even more reverb
-                        const matingDelay = ctx.createDelay(4.0);
-                        matingDelay.delayTime.setValueAtTime(1.5, ctx.currentTime); // 1.5s delay - longer reverb
-                        const matingDelayGain = ctx.createGain();
-                        matingDelayGain.gain.setValueAtTime(0.6, ctx.currentTime); // More feedback
-                        const matingReverbGain = ctx.createGain();
-                        matingReverbGain.gain.setValueAtTime(0.9, ctx.currentTime); // Very strong reverb mix
-                        
-                        // Connect: osc -> gain -> delay -> feedback -> reverb -> destination
-                        osc.connect(gain);
-                        gain.connect(matingDelay);
-                        matingDelay.connect(matingDelayGain);
-                        matingDelayGain.connect(matingDelay); // Feedback
-                        matingDelayGain.connect(matingReverbGain);
-                        gain.connect(matingReverbGain); // Direct + reverb
-                        matingReverbGain.connect(ctx.destination);
-                        
-                        // Louder so audible, slow bell with soft attack
-                        gain.gain.setValueAtTime(0, ctx.currentTime);
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.1, ctx.currentTime + duration * 0.3);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 2.0);
-                        duration *= 2.0; // Slow bell
+                        // TEMPORARILY DISABLED FOR TESTING - was long with delay/reverb
+                        return; // Don't play any sound
                         break;
                     
                     default:
-                        // Generic soft electronic beep
+                        // Log unhandled sound types to identify what's playing
+                        console.log('UNHANDLED SOUND TYPE:', type, 'frequency:', frequency, 'duration:', duration, 'volume:', volume);
+                        // Default: Ultra short generic soft electronic beep
                         osc.frequency.setValueAtTime(frequency * 0.7, ctx.currentTime);
-                        osc.type = 'sine'; // Softer
-                        gain.gain.setValueAtTime(0, ctx.currentTime); // Soft attack
-                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.1);
-                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+                        osc.type = 'sine';
+                        gain.gain.setValueAtTime(0, ctx.currentTime);
+                        gain.gain.linearRampToValueAtTime(finalVolume * 0.12, ctx.currentTime + duration * 0.05);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration * 0.15);
+                        duration *= 0.15;
                 }
                 
+                // Start and stop the oscillator
                 osc.start(ctx.currentTime);
                 osc.stop(ctx.currentTime + duration);
+            }
+            
+            // Helper method to enable/disable sounds from one place
+            setSoundEnabled(soundType, enabled) {
+                if (this.soundEnabled.hasOwnProperty(soundType)) {
+                    this.soundEnabled[soundType] = enabled;
+                    console.log(`Sound '${soundType}' ${enabled ? 'enabled' : 'disabled'}`);
+                } else {
+                    console.warn(`Unknown sound type: ${soundType}`);
+                }
+            }
+            
+            // Helper method to enable/disable multiple sounds at once
+            setSoundsEnabled(soundTypes, enabled) {
+                soundTypes.forEach(type => this.setSoundEnabled(type, enabled));
+            }
+            
+            // Helper method to disable all sounds
+            disableAllSounds() {
+                Object.keys(this.soundEnabled).forEach(type => {
+                    this.soundEnabled[type] = false;
+                });
+                console.log('All sounds disabled');
+            }
+            
+            // Helper method to enable all sounds
+            enableAllSounds() {
+                Object.keys(this.soundEnabled).forEach(type => {
+                    this.soundEnabled[type] = true;
+                });
+                console.log('All sounds enabled');
             }
         }
         
@@ -2379,47 +2424,56 @@
                     
                     // Adjust spawn interval based on multiplier (lower interval = faster spawning)
                     let effectiveInterval = Math.floor(this.spawnInterval / spawnRateMultiplier);
-                    if (sim.frame >= this.nextSpawn) {
-                        // Spawn a random medium to high tech level agent
-                        let mediumHighTechRoles = [
-                            'Merchant', 'Diplomat', 'Scientist', 'Artisan', 'Guardian', 
-                            'Raider', 'Technologist', 'Spy', 'Teacher'
-                        ];
-                        let role = mediumHighTechRoles[Math.floor(Math.random() * mediumHighTechRoles.length)];
+                    // Check if tribe has required tech tier (at least tier 1 for spawn points)
+                    let tribe = sim.tribes.tribes[this.tribeId];
+                    if (tribe && tribe.techTier >= 1) { // Medium-high tech requires at least tier 1
+                        // Get available roles (filter to tier 1+ roles only for spawn points)
+                        let allRoles = getAvailableRoles(tribe.techTier);
+                        let mediumHighTechRoles = allRoles.filter(role => getRequiredTechTier(role) >= 1);
                         
-                        // Check if tribe has required tech tier
-                        let tribe = sim.tribes.tribes[this.tribeId];
-                        if (tribe && tribe.techTier >= 1) { // Medium-high tech requires at least tier 1
-                            let agent = sim.spawnAgent(role, null);
-                            if (agent) {
-                                agent.role = role;
-                                agent.determineRole();
-                                agent.tribeId = this.tribeId;
-                                if (tribe) {
-                                    agent.color = tribe.color;
+                        if (mediumHighTechRoles.length > 0) {
+                            let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                            let roleCaps = CONFIG.agentRoleCaps || {};
+                            let spawnRates = CONFIG.agentSpawnRates || {};
+                            let role = weightedRandomRole(mediumHighTechRoles, currentCounts, roleCaps, spawnRates, { targetPerRole: 5 });
+                            
+                            if (role) {
+                                // Check if at cap
+                                let cap = roleCaps[role] || Infinity;
+                                let current = currentCounts[role] || 0;
+                                if (current < cap) {
+                                    let agent = sim.spawnAgent(role, null);
+                                    if (agent) {
+                                        agent.role = role;
+                                        agent.determineRole();
+                                        agent.tribeId = this.tribeId;
+                                        if (tribe) {
+                                            agent.color = tribe.color;
+                                        }
+                                        // Spawn near the spawn point
+                                        let angle = Math.random() * Math.PI * 2;
+                                        let offset = 10 + Math.random() * 10;
+                                        agent.pos.x = this.pos.x + Math.cos(angle) * offset;
+                                        agent.pos.y = this.pos.y + Math.sin(angle) * offset;
+                                        agent.createInitialResources();
+                                        // Green spatter effect when spawning
+                                        for (let i = 0; i < 8; i++) {
+                                            let spatterAngle = (i / 8) * Math.PI * 2;
+                                            let spatterDist = 5 + Math.random() * 10;
+                                            sim.particles.push(new Particle(
+                                                this.pos.x + Math.cos(spatterAngle) * spatterDist,
+                                                this.pos.y + Math.sin(spatterAngle) * spatterDist,
+                                                '#22c55e', 'spark'
+                                            ));
+                                        }
+                                        sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
+                                    }
                                 }
-                                // Spawn near the spawn point
-                                let angle = Math.random() * Math.PI * 2;
-                                let offset = 10 + Math.random() * 10;
-                                agent.pos.x = this.pos.x + Math.cos(angle) * offset;
-                                agent.pos.y = this.pos.y + Math.sin(angle) * offset;
-                                agent.createInitialResources();
-                                // Green spatter effect when spawning
-                                for (let i = 0; i < 8; i++) {
-                                    let spatterAngle = (i / 8) * Math.PI * 2;
-                                    let spatterDist = 5 + Math.random() * 10;
-                                    sim.particles.push(new Particle(
-                                        this.pos.x + Math.cos(spatterAngle) * spatterDist,
-                                        this.pos.y + Math.sin(spatterAngle) * spatterDist,
-                                        '#22c55e', 'spark'
-                                    ));
-                                }
-                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
                             }
                         }
-                        
-                        this.nextSpawn = sim.frame + effectiveInterval;
                     }
+                    
+                    this.nextSpawn = sim.frame + effectiveInterval;
                 }
             }
             draw(ctx) {
@@ -2723,14 +2777,14 @@
                         spawnRate *= techSpawnBonus;
                     }
                     
-                    // Check for POST-WAR BABY BOOM - 20x spawning of all agent types
+                    // Check for POST-WAR BABY BOOM - 10x spawning of all agent types
                     let isInBabyBoom = this.babyBoom > 0;
                     
                     if (isInBabyBoom) {
-                        // BABY BOOM - Massive spawning of ALL agent types (STRENGTHENED)
+                        // BABY BOOM - Massive spawning of ALL agent types
                         // Wealth factor is more generous - full rate at lower wealth threshold
-                        let wealthFactor = Math.min(1.0, this.wealth / 200); // INCREASED: Full rate at 200+ wealth (was 300)
-                        let festivalSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * (15.0 + (15.0 * wealthFactor)); // INCREASED: 15-30x normal rate (was 10-20x), scales with wealth
+                        let wealthFactor = Math.min(1.0, this.wealth / 200); // Full rate at 200+ wealth
+                        let festivalSpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * 10.0; // 10x normal rate
                         
                         // Only spawn if nest has enough wealth to support new agents
                         // Lower threshold - winners can spawn even with less wealth (baby boom is strong!)
@@ -2738,24 +2792,11 @@
                         if (this.wealth >= minWealthForSpawn && Math.random() < festivalSpawnRate) {
                             let tribe = sim.tribes && sim.tribes.tribes[this.tribeId];
                             if (tribe && tribe.techTier !== undefined) {
-                                // Build list of ALL available roles for baby boom
-                                let allAvailableRoles = [];
-                                if (typeof CONFIG.agentSpawnRates === 'object') {
-                                    for (let role in CONFIG.agentSpawnRates) {
-                                        // Check tech tier requirements
-                                        let requiredTier = 0;
-                                        if (role === 'Merchant' || role === 'Diplomat' || role === 'Scientist' || role === 'Spy') requiredTier = 1;
-                                        if (role === 'Artisan' || role === 'Guardian') requiredTier = 1;
-                                        if (role === 'Raider' || role === 'Technologist') requiredTier = 2;
-                                        if (tribe.techTier >= requiredTier || role === 'Soldier' || role === 'Gatherer' || role === 'Scout' || role === 'Builder' || role === 'Farmer') {
-                                            allAvailableRoles.push(role);
-                                        }
-                                    }
-                                }
-                                // Always include basic roles
-                                if (allAvailableRoles.length === 0) {
-                                    allAvailableRoles = ['Gatherer', 'Scout', 'Builder', 'Farmer', 'Soldier'];
-                                }
+                                // Use centralized function to get available roles
+                                let allAvailableRoles = getAvailableRoles(tribe.techTier);
+                                let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                                let roleCaps = CONFIG.agentRoleCaps || {};
+                                let spawnRates = CONFIG.agentSpawnRates || {};
                                 
                                 // Spawn multiple agents during baby boom (celebration!)
                                 // More generous wealth limits - baby boom should be strong!
@@ -2764,12 +2805,23 @@
                                 let spawnedCount = 0;
                                 
                                 // Lower wealth threshold - allow spawning with less wealth during baby boom
+                                // Use weighted random selection respecting spawn rates and caps
                                 for (let i = 0; i < numToSpawn && spawnedCount < 5 && this.wealth >= 20; i++) { // INCREASED: 5 max (was 3), 20 wealth minimum (was 30)
-                                    let role = allAvailableRoles[Math.floor(Math.random() * allAvailableRoles.length)];
+                                    let role = weightedRandomRole(allAvailableRoles, currentCounts, roleCaps, spawnRates, { targetPerRole: 5 });
+                                    if (!role) break; // No more roles available
+                                    
+                                    // Check if at cap
+                                    let cap = roleCaps[role] || Infinity;
+                                    let current = currentCounts[role] || 0;
+                                    if (current >= cap) continue; // Skip if at cap
+                                    
                                     let agent = sim.spawnAgent(role, this);
                                     if (agent) {
                                         agent.role = role;
                                         agent.determineRole();
+                                        // Update counts
+                                        currentCounts[role] = (currentCounts[role] || 0) + 1;
+                                        
                                         let angle = (spawnedCount / numToSpawn) * Math.PI * 2;
                                         let offset = 20 + Math.random() * 15;
                                         agent.pos.x += Math.cos(angle) * offset;
@@ -2791,7 +2843,9 @@
                                         }
                                         // Celebration SFX for baby boom
                                         if (spawnedCount === 0) { // Play once per spawn event
-                                            sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.08); // Harmonic birth tone
+                                            // Vary birth tone - wider range
+                                            // TEMPORARILY DISABLED FOR TESTING
+                                            // sfx.play('birth', getHarmonicFreq([HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 12), 0.08);
                                         }
                                         spawnedCount++;
                                     }
@@ -2839,13 +2893,22 @@
                             let tribe = sim.tribes && sim.tribes.tribes[this.tribeId];
                             if (tribe && tribe.techTier !== undefined) {
                                 let availableMoneyRoles = moneyMakingRoles.filter(role => {
-                                    let requiredTier = 0;
-                                    if (role === 'Merchant' || role === 'Artisan') requiredTier = 1;
-                                    return tribe.techTier >= requiredTier || role === 'Miner' || role === 'Builder' || role === 'Farmer';
+                                    let requiredTier = getRequiredTechTier(role);
+                                    return tribe.techTier >= requiredTier || isBasicRole(role);
                                 });
                                 
                                 if (availableMoneyRoles.length > 0) {
-                                    let role = availableMoneyRoles[Math.floor(Math.random() * availableMoneyRoles.length)];
+                                    let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                                    let roleCaps = CONFIG.agentRoleCaps || {};
+                                    let spawnRates = CONFIG.agentSpawnRates || {};
+                                    let role = weightedRandomRole(availableMoneyRoles, currentCounts, roleCaps, spawnRates, { economic: true, targetPerRole: 5 });
+                                    if (!role) return; // No roles available
+                                    
+                                    // Check if at cap
+                                    let cap = roleCaps[role] || Infinity;
+                                    let current = currentCounts[role] || 0;
+                                    if (current >= cap) return; // At cap, skip
+                                    
                                     let agent = sim.spawnAgent(role, this);
                                     if (agent) {
                                         agent.role = role;
@@ -2867,7 +2930,10 @@
                                         }
                                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
                                         // SFX for economic bond spawning
-                                        sfx.play('spawn', getHarmonicFreq([HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 5), 0.08);
+                                        // Vary spawn tone - use wider range of notes
+                                        let spawnNotes = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                        // TEMPORARILY DISABLED FOR TESTING
+                                        // sfx.play('spawn', getHarmonicFreq(spawnNotes, 8), 0.08);
                                     }
                                 }
                             }
@@ -2879,16 +2945,14 @@
                         let fightingRoleSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * 10.0; // 10x normal rate
                         let fightingRoles = ['Soldier', 'Raider', 'Guardian'];
                         
-                        // Check tech tier for fighting roles
+                        // Check tech tier for fighting roles using centralized function
                         let tribeForWar = sim.tribes && sim.tribes.tribes[this.tribeId];
                         let availableFightingRoles = [];
                         if (tribeForWar && tribeForWar.techTier !== undefined) {
-                            for (let role of fightingRoles) {
-                                let requiredTier = (role === 'Raider') ? 2 : 1; // Raider needs tier 2, others need tier 1
-                                if (tribeForWar.techTier >= requiredTier || role === 'Soldier') { // Soldier always available
-                                    availableFightingRoles.push(role);
-                                }
-                            }
+                            availableFightingRoles = fightingRoles.filter(role => {
+                                let requiredTier = getRequiredTechTier(role);
+                                return tribeForWar.techTier >= requiredTier || isBasicRole(role);
+                            });
                         } else {
                             // Fallback: at least spawn Soldiers
                             availableFightingRoles = ['Soldier'];
@@ -2896,7 +2960,17 @@
                         
                         // Spawn fighting roles at 10x rate during war
                         if (availableFightingRoles.length > 0 && Math.random() < fightingRoleSpawnRate) {
-                            let role = availableFightingRoles[Math.floor(Math.random() * availableFightingRoles.length)];
+                            let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                            let roleCaps = CONFIG.agentRoleCaps || {};
+                            let spawnRates = CONFIG.agentSpawnRates || {};
+                            let role = weightedRandomRole(availableFightingRoles, currentCounts, roleCaps, spawnRates, { war: true, targetPerRole: 5 });
+                            if (!role) return; // No roles available
+                            
+                            // Check if at cap
+                            let cap = roleCaps[role] || Infinity;
+                            let current = currentCounts[role] || 0;
+                            if (current >= cap) return; // At cap, skip
+                            
                             let agent = sim.spawnAgent(role, this);
                             if (agent) {
                                 agent.role = role;
@@ -2918,8 +2992,6 @@
                                     ));
                                 }
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
-                                // SFX for war-time spawning
-                                sfx.play('spawn', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 8), 0.1);
                             }
                         }
                     }
@@ -2928,139 +3000,73 @@
                     if (Math.random() < spawnRate) {
                         let tribe = sim.tribes && sim.tribes.tribes[this.tribeId];
                         if (tribe && tribe.techTier !== undefined) {
-                            // Build list of all spawnable roles based on tech tier
-                            let allAvailableRoles = [];
-                            if (typeof CONFIG.agentSpawnRates === 'object') {
-                                for (let role in CONFIG.agentSpawnRates) {
-                                    // Check tech tier requirements
-                                    let requiredTier = 0;
-                                    if (role === 'Merchant' || role === 'Diplomat' || role === 'Scientist' || role === 'Spy') requiredTier = 1;
-                                    if (role === 'Artisan' || role === 'Guardian') requiredTier = 1;
-                                    if (role === 'Technologist') requiredTier = 2;
-                                    if (tribe.techTier >= requiredTier) {
-                                        allAvailableRoles.push(role);
-                                    }
-                                }
-                            }
-                            // Always include basic roles
-                            if (allAvailableRoles.length === 0) {
-                                allAvailableRoles = ['Gatherer', 'Scout', 'Builder', 'Farmer'];
-                            }
+                            // Use centralized function to get available roles
+                            let allAvailableRoles = getAvailableRoles(tribe.techTier);
                             
-                            // During war, prioritize fighting roles in normal spawns too
-                            if (isAtWar) {
-                                let fightingRoles = ['Soldier', 'Raider', 'Guardian'].filter(r => allAvailableRoles.includes(r));
-                                // Add fighting roles multiple times to increase their spawn probability
-                                for (let i = 0; i < 3; i++) {
-                                    allAvailableRoles.push(...fightingRoles);
-                                }
-                            }
+                            // Check for modifiers (used in weighted selection)
+                            let hasTeachersScientists = false;
+                            let hasNearbyBlocks = false;
                             
-                            // During economic bonds, prioritize money-making roles (modest increase)
-                            if (hasCommercialBonds) {
-                                let moneyRoles = ['Merchant', 'Artisan', 'Miner', 'Builder', 'Farmer'].filter(r => allAvailableRoles.includes(r));
-                                // Add money-making roles to increase their spawn probability (less than war, modest)
-                                for (let i = 0; i < 2; i++) {
-                                    allAvailableRoles.push(...moneyRoles);
-                                }
-                            }
-                            
-                            // TEACHER/SCIENTIST BOOST: Double chance of technologists being spawned
-                            if (allAvailableRoles.includes('Technologist')) {
-                                // PERFORMANCE: Cache teacher/scientist check per tribe - update every 60 frames
-                                let tribe = sim.tribes.tribes[this.tribeId];
-                                if (tribe) {
-                                    if (!tribe._cachedHasTeachersScientists || (sim.frame % 60 === 0)) {
-                                        let tribeMembers = sim.agents.filter(a => a.tribeId === this.tribeId && !a.dead);
-                                        tribe._cachedHasTeachersScientists = 
-                                            tribeMembers.some(a => a.role === 'Teacher') || 
-                                            tribeMembers.some(a => a.role === 'Scientist');
-                                    }
-                                    if (tribe._cachedHasTeachersScientists) {
-                                        // Double chance by adding Technologist twice more
-                                        allAvailableRoles.push('Technologist');
-                                        allAvailableRoles.push('Technologist');
-                                    }
-                                }
-                            }
-                            
-                            // BLOCKS BOOST: Presence of blocks near nest doubles builder spawn chance
-                            if (allAvailableRoles.includes('Builder')) {
-                                // PERFORMANCE: Use spatial grid to check for nearby blocks - cache result every 60 frames
-                                let hasNearbyBlocks = false;
-                                if (typeof sim !== 'undefined' && sim.spatialGrid && sim.gridCols > 0) {
-                                    // Cache check per nest - update every 60 frames
-                                    if (!this._cachedHasNearbyBlocks || (sim.frame % 60 === 0)) {
-                                        let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.radius + 100); // Check within 100 pixels of nest edge
-                                        this._cachedHasNearbyBlocks = nearby.resources.some(r => 
-                                            r.type === 'BLOCK' && 
-                                            r.active && 
-                                            r.creatorTribe === this.tribeId // Only count own tribe's blocks
-                                        );
-                                    }
-                                    hasNearbyBlocks = this._cachedHasNearbyBlocks;
-                                } else {
-                                    // Fallback: check directly if spatial grid not available
-                                    hasNearbyBlocks = sim.resources.some(r => 
-                                        r.type === 'BLOCK' && 
-                                        r.active && 
-                                        r.creatorTribe === this.tribeId &&
-                                        Vector.dist(r.pos, this.pos) < this.radius + 100
-                                    );
-                                }
-                                
-                                if (hasNearbyBlocks) {
-                                    // Double chance by adding Builder twice more
-                                    allAvailableRoles.push('Builder');
-                                    allAvailableRoles.push('Builder');
-                                }
-                            }
-                            
-                            // WORKFORCE MANAGEMENT: Spawn agents in tech tree order, 3x the number, maintain workforce
-                            // Get current agent counts by role for this tribe
-                            let currentCounts = {};
+                            // Check for Teachers/Scientists
                             if (sim && sim.agents) {
-                                sim.agents.forEach(a => {
-                                    if (a.tribeId === this.tribeId && !a.dead && a.role) {
-                                        currentCounts[a.role] = (currentCounts[a.role] || 0) + 1;
-                                    }
-                                });
+                                let tribeMembers = sim.agents.filter(a => a.tribeId === this.tribeId && !a.dead);
+                                hasTeachersScientists = tribeMembers.some(a => a.role === 'Teacher') || 
+                                                       tribeMembers.some(a => a.role === 'Scientist');
                             }
                             
-                            // Define target workforce: 3 agents of each available role type
-                            let targetPerRole = 3;
+                            // Check for nearby blocks
+                            if (typeof sim !== 'undefined' && sim.spatialGrid && sim.gridCols > 0) {
+                                let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.radius + 100);
+                                hasNearbyBlocks = nearby.resources.some(r => 
+                                    r.type === 'BLOCK' && r.active && r.creatorTribe === this.tribeId
+                                );
+                            }
                             
-                            // Organize roles by tech tier (spawn in order: tier 0, then tier 1, then tier 2)
+                            // WORKFORCE MANAGEMENT: Use weighted random selection based on spawn rates
+                            // Get current agent counts by role for this tribe
+                            let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                            let roleCaps = CONFIG.agentRoleCaps || {};
+                            let spawnRates = CONFIG.agentSpawnRates || {};
+                            
+                            // Define target workforce: 5 agents of each available role type (increased from 3)
+                            let targetPerRole = 5;
+                            
+                            // Build modifiers object
+                            let modifiers = {
+                                war: isAtWar,
+                                economic: hasCommercialBonds,
+                                hasTeachersScientists: hasTeachersScientists,
+                                hasNearbyBlocks: hasNearbyBlocks,
+                                targetPerRole: targetPerRole
+                            };
+                            
+                            // Spawn agents using weighted random selection (respects spawn rates and caps)
+                            let spawnedCount = 0;
+                            let maxSpawnPerEvent = 6; // Reduced from 18 - spawn fewer but smarter
+                            
+                            // Organize roles by tech tier for spawning order
                             let rolesByTier = { 0: [], 1: [], 2: [] };
                             allAvailableRoles.forEach(role => {
-                                let requiredTier = 0;
-                                if (role === 'Merchant' || role === 'Diplomat' || role === 'Scientist' || role === 'Spy') requiredTier = 1;
-                                if (role === 'Artisan' || role === 'Guardian') requiredTier = 1;
-                                if (role === 'Raider' || role === 'Technologist') requiredTier = 2;
-                                if (rolesByTier[requiredTier] === undefined) rolesByTier[requiredTier] = [];
-                                rolesByTier[requiredTier].push(role);
+                                let tier = getRequiredTechTier(role);
+                                if (rolesByTier[tier] === undefined) rolesByTier[tier] = [];
+                                rolesByTier[tier].push(role);
                             });
-                            
-                            // Spawn agents in tech tree order, maintaining workforce
-                            let spawnedCount = 0;
-                            let maxSpawnPerEvent = 18; // Allow up to 18 agents per spawn event (3x the old max of 6)
                             
                             // Spawn in tier order: 0, then 1, then 2
                             for (let tier = 0; tier <= 2; tier++) {
                                 if (spawnedCount >= maxSpawnPerEvent) break;
                                 if (!rolesByTier[tier] || rolesByTier[tier].length === 0) continue;
                                 
-                                for (let role of rolesByTier[tier]) {
-                                    if (spawnedCount >= maxSpawnPerEvent) break;
-                                    
-                                    // Check if we need more of this role (maintain workforce)
-                                    let currentCount = currentCounts[role] || 0;
-                                    let needed = Math.max(0, targetPerRole - currentCount);
-                                    
-                                    // Spawn 3x the needed amount (or at least 3 if we have none)
-                                    let toSpawn = needed > 0 ? Math.min(needed * 3, 9) : (currentCount === 0 ? 3 : 0);
-                                    
-                                    for (let j = 0; j < toSpawn && spawnedCount < maxSpawnPerEvent; j++) {
+                                // Spawn 1-2 agents per tier, using weighted selection
+                                let tierSpawns = tier === 0 ? 2 : 1; // More basic roles, fewer advanced
+                                for (let i = 0; i < tierSpawns && spawnedCount < maxSpawnPerEvent; i++) {
+                                    let role = weightedRandomRole(rolesByTier[tier], currentCounts, roleCaps, spawnRates, modifiers);
+                                    if (role) {
+                                        // Check if we're at cap
+                                        let cap = roleCaps[role] || Infinity;
+                                        let current = currentCounts[role] || 0;
+                                        if (current >= cap) continue; // Skip if at cap
+                                        
                                         let agent = sim.spawnAgent(role, this);
                                         if (agent) {
                                             agent.role = role;
@@ -3070,6 +3076,10 @@
                                             let offset = 15 + Math.random() * 10;
                                             agent.pos.x += Math.cos(angle) * offset;
                                             agent.pos.y += Math.sin(angle) * offset;
+                                            
+                                            // Update counts
+                                            currentCounts[role] = (currentCounts[role] || 0) + 1;
+                                            
                                             sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#60a5fa', 'spark'));
                                             // Green spatter effect at nest position when spawning
                                             if (spawnedCount === 0) { // Only add spatter once per spawn event
@@ -3084,7 +3094,10 @@
                                                 }
                                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
                                                 // SFX for normal spawning
-                                                sfx.play('spawn', getHarmonicFreq([HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 5), 0.06);
+                                                // Vary spawn tone - use wider range of notes
+                                                let spawnNotes2 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                                // TEMPORARILY DISABLED FOR TESTING
+                                                // sfx.play('spawn', getHarmonicFreq(spawnNotes2, 8), 0.06);
                                             }
                                             spawnedCount++;
                                         }
@@ -3266,7 +3279,9 @@
                             
                             // SFX for emergency taxation (if significant amount collected)
                             if (totalTaxed > 5 && Math.random() < 0.3) {
-                                sfx.play('transaction', getHarmonicFreq([HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 5), 0.08);
+                                // Vary transaction tone
+                                let transactionNotes = [HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                sfx.play('transaction', getHarmonicFreq(transactionNotes, 8), 0.08);
                                 // VFX at nest for tax collection
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#f59e0b', 'coin'));
                             }
@@ -3296,7 +3311,10 @@
                                 }
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
                                 // SFX for emergency spawning
-                                sfx.play('spawn', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 8), 0.1);
+                                // Vary spawn tone - use wider range of notes
+                                let spawnNotes3 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5, HARMONICS.G5];
+                                // TEMPORARILY DISABLED FOR TESTING
+                                // sfx.play('spawn', getHarmonicFreq(spawnNotes3, 10), 0.1);
                             }
                         }
                         
@@ -3314,7 +3332,9 @@
                             if (Math.random() < 0.3) {
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ef4444', 'spark'));
                                 // SFX for emergency resource production
-                                sfx.play('collect', getHarmonicFreq([HARMONICS.C5, HARMONICS.D5, HARMONICS.E5], 5), 0.08);
+                                // Vary collect tone
+                                let collectNotes = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                sfx.play('collect', getHarmonicFreq(collectNotes, 8), 0.08);
                             }
                         }
                     }
@@ -3541,7 +3561,7 @@
                             
                             memberIndex += thisNestMembers;
                             
-                            // START BABY BOOM - 20x spawning for 750 frames (reduced from 1500 for graphics stability)
+                            // START BABY BOOM - 10x spawning for 750 frames (reduced from 1500 for graphics stability)
                             winnerNest.babyBoom = 750;
                             
                             // IMMEDIATE HP RESTORATION - War winners need full health to survive post-war
@@ -3624,9 +3644,6 @@
                                                 sim.particles.push(new Particle(partnerNest.pos.x, partnerNest.pos.y, '#3b82f6', 'star')); // Blue for diplomatic
                                                 sim.particles.push(new Particle(partnerNest.pos.x, partnerNest.pos.y, '#fbbf24', 'coin')); // Gold for wealth
                                                 
-                                                // SFX for boon
-                                                sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.15);
-                                                
                                                 console.log(`Diplomatic boon: Tribe ${partnerId} received ${wealthBoon.toFixed(1)} wealth and ${hpBoon.toFixed(1)} HP from ally ${winnerNest.tribeId}'s victory!`);
                                             }
                                         }
@@ -3690,10 +3707,9 @@
                         sim._cleanupAfterLargeDieOff();
                     }
                     
-                    // VFX & SFX - NEST DEATH SOUND
+                    // VFX
                     sim.particles.push(new Particle(this.pos.x, this.pos.y, '#dc2626', 'explosion'));
                     sim.particles.push(new Particle(this.pos.x, this.pos.y, '#9ca3af', 'smoke'));
-                    sfx.play('death', HARMONICS.A3, 0.25); // Lower, more dramatic nest death sound (harmonic A3)
                 } 
                 
                 // Nest drift based on tribal relations, diplomatic and commercial bonds
@@ -4195,7 +4211,13 @@
                     agent.health = Math.max(0, agent.health);
                     if (agent.health <= 0) {
                         agent.dead = true;
-                        sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'blood'));
+                        // Only create blood particle if particle count is reasonable
+                        if (sim.particles.length < 200) {
+                            // Only create blood particle if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'blood'));
+                            }
+                        }
                     }
                 }
             }
@@ -4332,7 +4354,9 @@
                     
                     // NEST BIRTH SOUND - Play birth-like tone when nest is created (SOFTER)
                     if (typeof sfx !== 'undefined' && sfx.enabled) {
-                        sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1); // Harmonic birth tone
+                        // Vary birth tone - wider range
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // sfx.play('birth', getHarmonicFreq([HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 12), 0.1);
                         
                         // Start nest heartbeat - each nest has unique frequency based on its ID
                         // DISABLED - not working
@@ -4453,7 +4477,8 @@
                 
                 // NEST BIRTH SOUND - Play birth-like tone when nest is created (tribe split) (SOFTER)
                 if (typeof sfx !== 'undefined' && sfx.enabled) {
-                    sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1); // Harmonic birth tone
+                    // TEMPORARILY DISABLED FOR TESTING
+                    // sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1); // Harmonic birth tone
                 }
                 agentsInTribe.forEach(a => a.tribeId = newId);
             }
@@ -4631,15 +4656,17 @@
                 t1.atWarWith[tribe2Id] = true;
                 t2.atWarWith[tribe1Id] = true;
                 
+                // WAR BOND CREATED - Dark ominous sound
+                if (typeof sfx !== 'undefined' && sfx.enabled) {
+                    // TEMPORARILY DISABLED FOR TESTING
+                    // sfx.play('death', HARMONICS.E4, 0.2); // Low, ominous war declaration sound
+                }
+                
                 // Update HUD status message
                 if (typeof sim !== 'undefined') {
                     sim.setStatusMessage(`⚔️ WAR DECLARED: Tribe ${tribe1Id} vs Tribe ${tribe2Id}`, 300); // Show for 300 frames (~5 seconds)
                 }
                 
-                // WAR START SOUND - Play ominous low tone when war begins
-                if (typeof sfx !== 'undefined' && sfx.enabled) {
-                    sfx.play('death', HARMONICS.E4, 0.2); // Low, ominous war declaration sound (harmonic E4)
-                }
                 
                 // Break diplomatic and commercial bonds between the two warring parties
                 t1.diplomaticBonds[tribe2Id] = 0;
@@ -4722,13 +4749,6 @@
                             this.updateOpinion(tribe1Id, t2PartyId, -10);
                             this.updateOpinion(t2PartyId, tribe1Id, -10);
                             
-                            // Play bond breaking sounds if bonds were stable
-                            if (typeof sfx !== 'undefined' && sfx.enabled) {
-                                if (prevBond1 >= 30) sfx.play('link_broken', HARMONICS.C5, 0.1);
-                                if (prevBond2 >= 30) sfx.play('link_broken', HARMONICS.A4, 0.1);
-                                if (prevBond3 >= 30) sfx.play('link_broken', HARMONICS.A4, 0.1);
-                                if (prevBond4 >= 30) sfx.play('link_broken', HARMONICS.C5, 0.1);
-                            }
                         }
                     }
                 }
@@ -4789,27 +4809,20 @@
                 }
                 
                 // WAR END SOUND - Play peaceful ascending tone when war ends
-                if (typeof sfx !== 'undefined' && sfx.enabled) {
-                    if (peaceTreaty) {
-                        // Peace treaty: harmonious tones
-                        sfx.play('bond', 440, 0.15); // A note
-                        setTimeout(() => {
-                            if (typeof sfx !== 'undefined' && sfx.enabled) {
-                                sfx.play('bond', 554, 0.12); // C# note (harmony)
-                            }
-                        }, 100);
-                    } else {
-                        // Simple war end
-                        sfx.play('bond', 330, 0.12); // Lower peaceful tone
-                    }
-                }
                 
                 if (peaceTreaty) {
                     // Peace treaty: relations improve, diplomatic bonds start
                     t1.relations[tribe2Id] = Math.max(-20, t1.relations[tribe2Id] + 30);
                     t2.relations[tribe1Id] = Math.max(-20, t2.relations[tribe1Id] + 30);
+                    let oldDip1 = t1.diplomaticBonds[tribe2Id] || 0;
+                    let oldDip2 = t2.diplomaticBonds[tribe1Id] || 0;
                     t1.diplomaticBonds[tribe2Id] = 20;
                     t2.diplomaticBonds[tribe1Id] = 20;
+                    
+                    // DIPLOMATIC BOND CREATED - Nice harmonious sound
+                    if ((oldDip1 < 10 || oldDip2 < 10) && typeof sfx !== 'undefined' && sfx.enabled) {
+                        sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.15); // Harmonious diplomatic tone
+                    }
                 }
             }
             
@@ -4866,31 +4879,14 @@
                     const newDipBond = tribe.diplomaticBonds[otherId] || 0;
                     const newComBond = tribe.commercialBonds[otherId] || 0;
                     
-                    if (prevDipBond < STABLE_BOND_THRESHOLD && newDipBond >= STABLE_BOND_THRESHOLD) {
-                        // Diplomatic bond just became stable - play sound
-                        if (typeof sfx !== 'undefined' && sfx.enabled) {
-                            sfx.play('link_formed', HARMONICS.A4, 0.12);
-                        }
-                    }
-                    if (prevComBond < STABLE_BOND_THRESHOLD && newComBond >= STABLE_BOND_THRESHOLD) {
-                        // Commercial bond just became stable - play sound
-                        if (typeof sfx !== 'undefined' && sfx.enabled) {
-                            sfx.play('link_formed', HARMONICS.C5, 0.12);
-                        }
+                    // DIPLOMATIC BOND CREATED - Nice harmonious sound (when crossing threshold)
+                    if (dipBond < 10 && newDipBond >= 10 && typeof sfx !== 'undefined' && sfx.enabled) {
+                        sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Harmonious diplomatic tone
                     }
                     
-                    // Check if bonds dropped below stable threshold (broken)
-                    if (prevDipBond >= STABLE_BOND_THRESHOLD && newDipBond < STABLE_BOND_THRESHOLD && newDipBond > 0) {
-                        // Diplomatic bond just broke - play sound
-                        if (typeof sfx !== 'undefined' && sfx.enabled) {
-                            sfx.play('link_broken', HARMONICS.A4, 0.1);
-                        }
-                    }
-                    if (prevComBond >= STABLE_BOND_THRESHOLD && newComBond < STABLE_BOND_THRESHOLD && newComBond > 0) {
-                        // Commercial bond just broke - play sound
-                        if (typeof sfx !== 'undefined' && sfx.enabled) {
-                            sfx.play('link_broken', HARMONICS.C5, 0.1);
-                        }
+                    // COMMERCIAL BOND CREATED - Nice harmonious sound (when crossing threshold)
+                    if (comBond < 10 && newComBond >= 10 && typeof sfx !== 'undefined' && sfx.enabled) {
+                        sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Harmonious commercial/trade tone
                     }
                     
                     // ============================================
@@ -4910,7 +4906,6 @@
                                     // Reduce relations as well
                                     this.updateOpinion(tribeId, otherId, -15);
                                     this.updateOpinion(otherId, tribeId, -15);
-                                    sfx.play('link_broken', 440, 0.1);
                                     continue; // Skip rest of processing for this bond
                                 }
                             }
@@ -4922,7 +4917,6 @@
                                     otherTribe.commercialBonds[tribeId] = 0;
                                     this.updateOpinion(tribeId, otherId, -15);
                                     this.updateOpinion(otherId, tribeId, -15);
-                                    sfx.play('link_broken', 440, 0.1);
                                     continue;
                                 }
                             }
@@ -4967,7 +4961,6 @@
                                     
                                     // UNPROFITABLE BOND BREAKS → DISLIKE!
                                     if (comBond >= 10 && newComBond < 10) {
-                                        sfx.play('link_broken', 460, 0.1);
                                         // Reduce relations when bond breaks due to unprofitability
                                         this.updateOpinion(tribeId, otherId, -20); // Significant hit to relations!
                                         this.updateOpinion(otherId, tribeId, -20);
@@ -5021,7 +5014,6 @@
                             
                             // DIPLOMATIC BOND BREAKS → DISLIKE!
                             if (dipBond >= 10 && newDipBond < 10) {
-                                sfx.play('link_broken', 420, 0.1);
                                 // Reduce relations when diplomatic bond breaks
                                 this.updateOpinion(tribeId, otherId, -15); // Diplomatic failure hurts relations
                                 this.updateOpinion(otherId, tribeId, -15);
@@ -5051,7 +5043,7 @@
                         // Weak bonds, terrible relations - can still go to war
                         if (Math.random() < 0.2) { // 20% chance (was 8%)
                             this.declareWar(tribeId, otherId);
-                            console.log(`WAR ESCALATED between tribe ${tribeId} and ${otherId}! Relations: ${relation}`);
+                            console.log(`WAR ESCALATED between tribe ${tribeId} and ${otherId}! Relations: ${relation.toFixed(1)}`);
                         }
                     }
                     
@@ -5193,8 +5185,15 @@
                         
                         // VFX
                         if (typeof sim !== 'undefined') {
+                            // Only create blood particle if particle count is reasonable
+                        if (sim.particles.length < 200) {
+                            // Only create blood particle if particle count is reasonable
+                            if (sim.particles.length < 200) {
                             sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'blood'));
-                            sfx.play('attack', 350, 0.1);
+                            }
+                        }
+                            // TEMPORARILY DISABLED FOR TESTING
+                            // sfx.play('attack', 350, 0.1);
                             
                             // DETERIORATE RELATIONS when projectile hits
                             if (this.shooter && this.shooter.tribeId !== undefined && agent.tribeId !== undefined && 
@@ -5217,19 +5216,19 @@
                 ctx.save();
                 ctx.globalAlpha = Math.min(1.0, this.life / 60);
                 
-                // Arrow/bolt - line with point
-                ctx.strokeStyle = this.type === 'bolt' ? '#60a5fa' : '#a8a29e';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(this.pos.x - this.vel.x, this.pos.y - this.vel.y);
-                ctx.lineTo(this.pos.x, this.pos.y);
-                ctx.stroke();
-                
-                // Arrowhead
-                ctx.fillStyle = this.type === 'bolt' ? '#3b82f6' : '#57534e';
-                ctx.beginPath();
-                ctx.arc(this.pos.x, this.pos.y, 2, 0, Math.PI * 2);
-                ctx.fill();
+                    // Arrow/bolt - line with point
+                    ctx.strokeStyle = this.type === 'bolt' ? '#60a5fa' : '#a8a29e';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(this.pos.x - this.vel.x, this.pos.y - this.vel.y);
+                    ctx.lineTo(this.pos.x, this.pos.y);
+                    ctx.stroke();
+                    
+                    // Arrowhead
+                    ctx.fillStyle = this.type === 'bolt' ? '#3b82f6' : '#57534e';
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
                 
                 ctx.restore();
             }
@@ -5447,7 +5446,8 @@
                     let musicalNotes = [HARMONICS.C5, HARMONICS.D5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5]; // Harmonic pentatonic
                     let note = musicalNotes[Math.floor(Math.random() * musicalNotes.length)];
                     // Soft, gentle tone - lower volume and longer duration for pleasant effect
-                    sfx.play('birth', note, 0.15, 0.4); // 0.15s duration, 40% volume for softness
+                    // TEMPORARILY DISABLED FOR TESTING
+                    // sfx.play('birth', note, 0.15, 0.4); // 0.15s duration, 40% volume for softness
                 }
             }
 
@@ -6059,7 +6059,8 @@
                             if (framesSinceLastBattleSound >= soundThrottle.battleSoundCooldown && !soundThrottle.battleSoundPlayedThisFrame) {
                                 // Use low static buzz for battle
                                 let battleFreq = HARMONICS.A3; // Low A (220 Hz) - base frequency for static
-                                sfx.play('static', battleFreq, 0.015); // Low static buzz - louder so it's audible
+                                // TEMPORARILY DISABLED FOR TESTING
+                                // sfx.play('static', battleFreq, 0.015); // Low static buzz - louder so it's audible
                                 soundThrottle.lastBattleSoundFrame = sim.frame; // Update global throttle
                                 soundThrottle.battleSoundPlayedThisFrame = true; // Mark as played this frame
                             }
@@ -6069,24 +6070,10 @@
                     }
                 }
                 
-                // Play love/mating sounds every 150 frames during mating (MUCH LOWER VOLUME)
-                // STRICT GLOBAL THROTTLE: Only ONE love sound can play per frame globally to prevent buzzing
+                // Mating state tracking (sound removed)
                 if (this.isMating && typeof sim !== 'undefined' && sim.frame) {
                     let framesSinceMating = sim.frame - this.lastMatingFrame;
-                    if (framesSinceMating <= 300) { // Mating state lasts 300 frames (2 sound plays)
-                        // Play sound every 150 frames (150, 300) - but only if no other love sound this frame or recently
-                        if (framesSinceMating % 150 === 0 && framesSinceMating > 0) {
-                            let framesSinceLastLoveSound = sim.frame - soundThrottle.lastLoveSoundFrame;
-                            // STRICT: Must pass cooldown AND no other love sound played this frame
-                            if (framesSinceLastLoveSound >= soundThrottle.loveSoundCooldown && !soundThrottle.loveSoundPlayedThisFrame) {
-                                // Use slow quiet bell tone for mating - with lots of reverb
-                                let matingFreq = LOVE_TONES[Math.floor(Math.random() * LOVE_TONES.length)];
-                                sfx.play('mating', matingFreq, 0.012); // Slow quiet bell - louder so it's audible, with lots of reverb
-                                soundThrottle.lastLoveSoundFrame = sim.frame; // Update global throttle
-                                soundThrottle.loveSoundPlayedThisFrame = true; // Mark as played this frame
-                            }
-                        }
-                    } else {
+                    if (framesSinceMating > 300) {
                         this.isMating = false; // Clear mating state after 300 frames
                     }
                 }
@@ -6402,7 +6389,6 @@
                                 
                                 // VFX for joining a tribe
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#3b82f6', 'star'));
-                                sfx.play('link_formed', 500 + Math.random() * 100, 0.1);
                             }
                         }
                      }
@@ -6581,7 +6567,7 @@
                             }
                         }
                     }
-                    this.energy -= cost;
+                this.energy -= cost;
                 } else {
                     // Leaders regenerate energy slowly (they don't consume tribe resources)
                     if (this.energy < this.maxEnergy) {
@@ -6622,7 +6608,6 @@
                     this.spawnDeathFoodBurst();
                     this.spawnGroupAgentBabies(sim);
                     sim.particles.push(new Particle(this.pos.x, this.pos.y, '#fff', 'skull'));
-                    sfx.play('death', getHarmonicFreq([HARMONICS.A3, HARMONICS.E4, HARMONICS.A4], 5), 0.3);
                     return;
                 }
 
@@ -7180,22 +7165,36 @@
                                     // Strong effect: 50% chance to form/strengthen diplomatic bond
                                     if (Math.random() < 0.5) {
                                         let currentDip = myTribe.diplomaticBonds[otherTribeId] || 0;
-                                        myTribe.diplomaticBonds[otherTribeId] = Math.min(100, currentDip + 5);
+                                        let newDip = Math.min(100, currentDip + 5);
+                                        myTribe.diplomaticBonds[otherTribeId] = newDip;
                                         if (otherTribe.diplomaticBonds[this.tribeId] === undefined) {
                                             otherTribe.diplomaticBonds[this.tribeId] = 0;
                                         }
                                         otherTribe.diplomaticBonds[this.tribeId] = Math.min(100, (otherTribe.diplomaticBonds[this.tribeId] || 0) + 5);
+                                        
+                                        // DIPLOMATIC BOND CREATED - Nice harmonious sound (when crossing threshold)
+                                        if (currentDip < 10 && newDip >= 10 && typeof sfx !== 'undefined' && sfx.enabled) {
+                                            sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Harmonious diplomatic tone
+                                        }
+                                        
                                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#3b82f6', 'spark'));
                                     }
                                     
                                     // Strong effect: 50% chance to form/strengthen commercial bond
                                     if (Math.random() < 0.5) {
                                         let currentCom = myTribe.commercialBonds[otherTribeId] || 0;
-                                        myTribe.commercialBonds[otherTribeId] = Math.min(100, currentCom + 5);
+                                        let newCom = Math.min(100, currentCom + 5);
+                                        myTribe.commercialBonds[otherTribeId] = newCom;
                                         if (otherTribe.commercialBonds[this.tribeId] === undefined) {
                                             otherTribe.commercialBonds[this.tribeId] = 0;
                                         }
                                         otherTribe.commercialBonds[this.tribeId] = Math.min(100, (otherTribe.commercialBonds[this.tribeId] || 0) + 5);
+                                        
+                                        // COMMERCIAL BOND CREATED - Nice harmonious sound (when crossing threshold)
+                                        if (currentCom < 10 && newCom >= 10 && typeof sfx !== 'undefined' && sfx.enabled) {
+                                            sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Harmonious commercial/trade tone
+                                        }
+                                        
                                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#22c55e', 'spark'));
                                     }
                                 }
@@ -7227,7 +7226,7 @@
                                             sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#ef4444', 'spark'));
                                             if (!active) { this.state = "Attacking Enemy"; active = true; }
                                             break;
-                                        } else {
+                    } else {
                                             // Seek enemy
                                             let seekForce = Vector.sub(agent.pos, this.pos).normalize().mult(0.5);
                                             forces.hunt.add(seekForce);
@@ -7401,7 +7400,10 @@
                             if (this.energy > 20) {
                                 this.energy -= 1;
                                 patient.health += 2;
-                                if (Math.random() < 0.1) sim.particles.push(new Particle(patient.pos.x, patient.pos.y, '#fbcfe8', 'heart'));
+                                // Self-limiting: Only create particle if particle count is reasonable
+                                if (Math.random() < 0.1 && sim.particles && sim.particles.length < 150) {
+                                    sim.particles.push(new Particle(patient.pos.x, patient.pos.y, '#fbcfe8', 'heart'));
+                                }
                             }
                         }
                     }
@@ -7837,18 +7839,21 @@
                             this.energy += 10; 
                             if(this.energy > this.maxEnergy) this.energy = this.maxEnergy; 
                             
-                            // BLOODY PARTICLE SCATTER EFFECTS - Local bloody particles during Monster combat
-                            for (let i = 0; i < 5; i++) {
-                                let angle = Math.random() * Math.PI * 2;
-                                let dist = Math.random() * 15;
-                                let particleX = nearest.pos.x + Math.cos(angle) * dist;
-                                let particleY = nearest.pos.y + Math.sin(angle) * dist;
-                                // Blood particles - red variations with slight scatter
-                                let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
-                                let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
-                                sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
-                            }
+                            // BLOODY PARTICLE SCATTER EFFECTS - Reduced for performance during intense battles
+                            // Only create particles if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                for (let i = 0; i < 2; i++) { // Reduced from 5 to 2
+                                    let angle = Math.random() * Math.PI * 2;
+                                    let dist = Math.random() * 15;
+                                    let particleX = nearest.pos.x + Math.cos(angle) * dist;
+                                    let particleY = nearest.pos.y + Math.sin(angle) * dist;
+                                    // Blood particles - red variations with slight scatter
+                                    let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
+                                    let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
+                                    sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
+                                }
                             sim.particles.push(new Particle(nearest.pos.x, nearest.pos.y, '#ef4444', 'spark'));
+                            }
                         }
                     } else {
                         forces.wander = this.wander();
@@ -7924,10 +7929,7 @@
                                         
                                         // ECONOMIC BOND FORMATION SOUND - Play when commercial bond reaches threshold
                                         let newBond1 = myTribe.commercialBonds[tradePartner.tribeId];
-                                        if (oldBond1 < 10 && newBond1 >= 10) {
-                                            // New economic bond formed
-                                            sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Commercial/trade sound (harmonic)
-                                        }
+                                        // Economic bond tracking (sound removed)
                                     }
                                     
                                     // Both merchants gain wealth from trade
@@ -8053,6 +8055,7 @@
                         
                         if (atWar && enemyTribeIds.length > 0) {
                             // Find nearby enemy agents to fight
+                            // PERFORMANCE: Uses localAgents from spatial grid (only searches current grid cell, not globally)
                             let enemyTarget = null;
                             let minEnemyDist = Infinity;
                             
@@ -8276,7 +8279,9 @@
                                 let recycled = recycledTypes[Math.floor(Math.random() * recycledTypes.length)];
                                 sim.spawnResource(null, this.pos.x + (Math.random()*20-10), this.pos.y + (Math.random()*20-10), recycled, false, this.tribeId);
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#a3e635', 'spark'));
-                                sfx.play('trade', 380, 0.08);
+                                // Vary trade tone
+                                let tradeNotes = [HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5];
+                                sfx.play('trade', getHarmonicFreq(tradeNotes, 5), 0.08);
                             }
                             
                             this.state = "Recycling";
@@ -8329,7 +8334,6 @@
                         
                         this.energy -= 30; // Same energy cost for 4 grazers
                         sim.particles.push(new Particle(this.pos.x, this.pos.y, '#84cc16', 'leaf'));
-                        sfx.play('birth', HARMONICS.A4, 0.1); // Harmonic birth tone
                         this.state = "Spawning Grazers";
                         
                         // Schedule next spawn in 30 steps
@@ -8356,7 +8360,13 @@
                             damage = closest.isInsideNest() ? damage / 1.5 : damage;
                             closest.health -= damage;
                             markLeaderUnderAttack(closest, this);
+                            // Only create blood particle if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                // Only create blood particle if particle count is reasonable
+                                if (sim.particles.length < 200) {
                             sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                                }
+                            }
                             // Sound handled by throttled system in update() - no direct call here
                         }
                     }
@@ -8510,7 +8520,13 @@
                                 damage = closest.isInsideNest() ? damage / 1.5 : damage;
                                 closest.health -= damage;
                                 markLeaderUnderAttack(closest, this);
+                                // Only create blood particle if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                // Only create blood particle if particle count is reasonable
+                                if (sim.particles.length < 200) {
                                 sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                                }
+                            }
                                 // Sound handled by throttled system in update() - no direct call here
                                 
                                 // DETERIORATE RELATIONS when attacking
@@ -8660,7 +8676,9 @@
                                     sim.spawnResource(null, this.pos.x, this.pos.y, recycledType, false, this.tribeId);
                                     
                                     sim.particles.push(new Particle(this.pos.x, this.pos.y, '#22c55e', 'spark'));
-                                    sfx.play('collect', HARMONICS.C5, 0.1);
+                                    // Vary collect tone
+                                    let collectNotes2 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5];
+                                    sfx.play('collect', getHarmonicFreq(collectNotes2, 6), 0.1);
                                 }
                             } else {
                                 // Seek garbage
@@ -8734,7 +8752,13 @@
                                 closest.health -= damage;
                                 markLeaderUnderAttack(closest, this);
                                 this.energy += 50; // Gain energy from kill
+                                // Only create blood particle if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                // Only create blood particle if particle count is reasonable
+                                if (sim.particles.length < 200) {
                                 sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                                }
+                            }
                                 // Sound handled by throttled system in update() - no direct call here
                             }
                         }
@@ -8964,9 +8988,9 @@
                                             sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] = 30;
                                             sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] = 30;
                                             
-                                            // DIPLOMATIC BOND FORMATION SOUND - Play when diplomatic bond is created from peace treaty
-                                            if (oldDipBond1 < 10 && 30 >= 10) {
-                                                sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.12); // Diplomatic tone (harmonic)
+                                            // DIPLOMATIC BOND CREATED - Nice harmonious sound
+                                            if ((oldDipBond1 < 10 || oldDipBond2 < 10) && typeof sfx !== 'undefined' && sfx.enabled) {
+                                                sfx.play('bond', getHarmonicFreq([HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 10), 0.15); // Harmonious diplomatic tone
                                             }
                                             
                                             // Improve relations significantly
@@ -9000,7 +9024,6 @@
                                         
                                         // SFX when bond forms (crosses threshold)
                                         if (currentBond < 20 && newBond >= 20) {
-                                            sfx.play('link_formed', 520, 0.15);
                                             sim.particles.push(new Particle(this.pos.x, this.pos.y, '#fbbf24', 'star'));
                                             sim.particles.push(new Particle(targetNest.pos.x, targetNest.pos.y, '#fbbf24', 'star'));
                                         }
@@ -9201,9 +9224,8 @@
                                 let currentBond = sim.tribes.tribes[this.tribeId].commercialBonds[targetNest.tribeId] || 0;
                                 let newBond = Math.min(100, currentBond + bondGrowth);
                                 
-                                // SFX when bond forms (crosses threshold)
+                                // VFX when bond forms (crosses threshold)
                                 if (currentBond < 20 && newBond >= 20) {
-                                    sfx.play('link_formed', 580, 0.15);
                                     sim.particles.push(new Particle(this.pos.x, this.pos.y, '#22d3ee', 'star'));
                                     sim.particles.push(new Particle(targetNest.pos.x, targetNest.pos.y, '#22d3ee', 'star'));
                                 }
@@ -9221,14 +9243,18 @@
                                 sim.tribes.progressTech(targetNest.tribeId, 'commerce', 2); // They also gain some
                                 
                                 // SFX for transaction
-                                sfx.play('transaction', HARMONICS.E5, 0.08);
+                                // Vary transaction tone
+                                let transactionNotes2 = [HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                sfx.play('transaction', getHarmonicFreq(transactionNotes2, 6), 0.08);
                                 
                                 // VFX (more coins for better deals)
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#22d3ee', 'coin'));
                                 if (myNegotiationPower > 1.5 || strengthRatio > 1.3) {
                                     sim.particles.push(new Particle(this.pos.x + 10, this.pos.y, '#fbbf24', 'coin'));
                                 }
-                                sfx.play('trade', 480, 0.15);
+                                // Vary trade tone
+                                let tradeNotes2 = [HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                sfx.play('trade', getHarmonicFreq(tradeNotes2, 6), 0.15);
                             }
                         }
                     } else if (!this.carrying) {
@@ -9607,7 +9633,9 @@
                                     if (Math.random() < 0.1) {
                                         sim.particles.push(new Particle(kin.pos.x, kin.pos.y, '#10b981', 'plus'));
                                         sim.particles.push(new Particle(kin.pos.x, kin.pos.y, '#6ee7b7', 'ring'));
-                                        sfx.play('heal', 520, 0.12);
+                                        // Vary heal tone
+                                        let healNotes = [HARMONICS.C5, HARMONICS.D5, HARMONICS.E5, HARMONICS.G5];
+                                        sfx.play('heal', getHarmonicFreq(healNotes, 5), 0.12);
                                     }
                                 }
                                 if (this.energy > this.maxEnergy * 0.6 && kin.energy < kin.maxEnergy * 0.5) {
@@ -9627,7 +9655,9 @@
                                     this.carrying.active = false;
                                     this.carrying = null;
                                     sim.particles.push(new Particle(kin.pos.x, kin.pos.y, '#4ade80', 'spark'));
-                                    sfx.play('eat', 480, 0.08);
+                                    // Vary eat tone
+                                    let eatNotes = [HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                    sfx.play('eat', getHarmonicFreq(eatNotes, 5), 0.08);
                                 }
                             }
                         }
@@ -9656,7 +9686,10 @@
                         other.adjustLoyalty(this.id, 3); 
                         this.state = "Bribing";
                         active = true;
-                        if (Math.random() < 0.1) sim.particles.push(new Particle(other.pos.x, other.pos.y, '#f472b6', 'heart'));
+                        // Self-limiting: Only create particle if particle count is reasonable
+                        if (Math.random() < 0.1 && sim.particles && sim.particles.length < 150) {
+                            sim.particles.push(new Particle(other.pos.x, other.pos.y, '#f472b6', 'heart'));
+                        }
                     }
 
                     // 2. JEALOUSY - attack rivals and their children
@@ -9765,18 +9798,22 @@
                             markLeaderUnderAttack(other, this);
                             if(this.energy > this.maxEnergy) this.energy = this.maxEnergy;
                             
-                            // BLOODY PARTICLE SCATTER EFFECTS - Local bloody particles during combat
-                            for (let i = 0; i < 3 + Math.floor(damage / 5); i++) {
-                                let angle = Math.random() * Math.PI * 2;
-                                let dist = Math.random() * 15;
-                                let particleX = other.pos.x + Math.cos(angle) * dist;
-                                let particleY = other.pos.y + Math.sin(angle) * dist;
-                                // Blood particles - red variations with slight scatter
-                                let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
-                                let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
-                                sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
-                            }
+                            // BLOODY PARTICLE SCATTER EFFECTS - Reduced for performance during intense battles
+                            // Only create particles if particle count is reasonable
+                            if (sim.particles.length < 200) {
+                                let particleCount = Math.min(2, 1 + Math.floor(damage / 10)); // Reduced: max 2 particles, scaled by damage
+                                for (let i = 0; i < particleCount; i++) {
+                                    let angle = Math.random() * Math.PI * 2;
+                                    let dist = Math.random() * 15;
+                                    let particleX = other.pos.x + Math.cos(angle) * dist;
+                                    let particleY = other.pos.y + Math.sin(angle) * dist;
+                                    // Blood particles - red variations with slight scatter
+                                    let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
+                                    let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
+                                    sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
+                                }
                             sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ef4444', 'spark'));
+                            }
                             
                             // BATTLE SOUND - Track combat state and play every 10 frames during combat
                             this.inCombat = true;
@@ -9954,18 +9991,22 @@
                              dmg = Math.max(1, dmg - shield); 
                              other.health -= dmg;
                              
-                             // BLOODY PARTICLE SCATTER EFFECTS - Local bloody particles during combat
-                             for (let i = 0; i < 3 + Math.floor(dmg / 5); i++) {
-                                 let angle = Math.random() * Math.PI * 2;
-                                 let dist = Math.random() * 15;
-                                 let particleX = other.pos.x + Math.cos(angle) * dist;
-                                 let particleY = other.pos.y + Math.sin(angle) * dist;
-                                 // Blood particles - red variations with slight scatter
-                                 let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
-                                 let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
-                                 sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
-                             }
+                             // BLOODY PARTICLE SCATTER EFFECTS - Reduced for performance during intense battles
+                             // Only create particles if particle count is reasonable
+                             if (sim.particles.length < 200) {
+                                 let particleCount = Math.min(2, 1 + Math.floor(dmg / 10)); // Reduced: max 2 particles, scaled by damage
+                                 for (let i = 0; i < particleCount; i++) {
+                                     let angle = Math.random() * Math.PI * 2;
+                                     let dist = Math.random() * 15;
+                                     let particleX = other.pos.x + Math.cos(angle) * dist;
+                                     let particleY = other.pos.y + Math.sin(angle) * dist;
+                                     // Blood particles - red variations with slight scatter
+                                     let bloodColors = ['#dc2626', '#b91c1c', '#991b1b', '#ef4444'];
+                                     let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
+                                     sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
+                                 }
                              sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ef4444', 'spark'));
+                             }
                              
                              // BATTLE SOUND - Track combat state and play every 10 frames during combat
                              this.inCombat = true;
@@ -10011,7 +10052,7 @@
                             }
                             
                             sim.particles.push(new Particle(other.pos.x, other.pos.y, '#fde047', 'spark'));
-                            sfx.play('diplomacy', 500 + Math.random() * 80, 0.15);
+                            // Diplomacy sound removed - was playing too frequently with varying tones
                             
                             // Recruit Unaffiliated
                             if (other.tribeId === -1 && Math.random() < 0.1) {
@@ -10288,29 +10329,32 @@
                             let mateChance = isSimilar ? 1.0 : 0.3; 
                             
                             // GROUP SIZE AMPLIFICATION - Larger groups have higher mating rates
-                            let myGroup = this.getCachedBondedGroup();
-                            let otherGroup = other.getCachedBondedGroup();
-                            let myGroupSize = myGroup.length;
-                            let otherGroupSize = otherGroup.length;
-                            let maxGroupSize = Math.max(myGroupSize, otherGroupSize);
-                            
-                            // Amplify mating rate based on group size
-                            // Group size 2-3: 1.2x, 4-6: 1.5x, 7-10: 2.0x, 11+: 2.5x
-                            let groupSizeMultiplier = 1.0;
-                            if (maxGroupSize >= 11) {
-                                groupSizeMultiplier = 2.5; // Very large groups: 2.5x mating rate
-                            } else if (maxGroupSize >= 7) {
-                                groupSizeMultiplier = 2.0; // Large groups: 2.0x mating rate
-                            } else if (maxGroupSize >= 4) {
-                                groupSizeMultiplier = 1.5; // Medium groups: 1.5x mating rate
-                            } else if (maxGroupSize >= 2) {
-                                groupSizeMultiplier = 1.2; // Small groups: 1.2x mating rate
+                            // BUT: Skip this multiplier for grazers/prey to prevent overpopulation
+                            if (!this.isGrazer && !this.isPrey && !other.isGrazer && !other.isPrey) {
+                                let myGroup = this.getCachedBondedGroup();
+                                let otherGroup = other.getCachedBondedGroup();
+                                let myGroupSize = myGroup.length;
+                                let otherGroupSize = otherGroup.length;
+                                let maxGroupSize = Math.max(myGroupSize, otherGroupSize);
+                                
+                                // Amplify mating rate based on group size
+                                // Group size 2-3: 1.2x, 4-6: 1.5x, 7-10: 2.0x, 11+: 2.5x
+                                let groupSizeMultiplier = 1.0;
+                                if (maxGroupSize >= 11) {
+                                    groupSizeMultiplier = 2.5; // Very large groups: 2.5x mating rate
+                                } else if (maxGroupSize >= 7) {
+                                    groupSizeMultiplier = 2.0; // Large groups: 2.0x mating rate
+                                } else if (maxGroupSize >= 4) {
+                                    groupSizeMultiplier = 1.5; // Medium groups: 1.5x mating rate
+                                } else if (maxGroupSize >= 2) {
+                                    groupSizeMultiplier = 1.2; // Small groups: 1.2x mating rate
+                                }
+                                // Solo agents (groupSize = 1) keep 1.0x multiplier
+                                
+                                // Apply group size amplification to mate chance (up to 1.0 cap)
+                                mateChance *= groupSizeMultiplier;
+                                mateChance = Math.min(1.0, mateChance); // Cap at 1.0
                             }
-                            // Solo agents (groupSize = 1) keep 1.0x multiplier
-                            
-                            // Apply group size amplification to mate chance (up to 1.0 cap)
-                            mateChance *= groupSizeMultiplier;
-                            mateChance = Math.min(1.0, mateChance); // Cap at 1.0
                             
                             // NEW NEST FERTILITY BOOST - 10% higher mate chance for new nests (first 1000 frames)
                             if (typeof sim !== 'undefined' && sim.tribes) {
@@ -10392,10 +10436,33 @@
                                     }
                                 }
                                 
-                                // Apply group size amplification to birth rate as well (for cooldown reduction)
+                                // GROUP SIZE AMPLIFICATION for birth rate (but NOT for grazers/prey)
+                                let myGroup = this.getCachedBondedGroup();
+                                let otherGroup = other.getCachedBondedGroup();
+                                let myGroupSize = myGroup.length;
+                                let otherGroupSize = otherGroup.length;
+                                let maxGroupSize = Math.max(myGroupSize, otherGroupSize);
+                                
+                                // Apply group size multiplier to birth rate only if NOT grazers/prey
+                                let groupSizeMultiplier = 1.0;
+                                if (!this.isGrazer && !this.isPrey && !other.isGrazer && !other.isPrey) {
+                                    // Amplify birth rate based on group size (same as mating rate)
+                                    if (maxGroupSize >= 11) {
+                                        groupSizeMultiplier = 2.5;
+                                    } else if (maxGroupSize >= 7) {
+                                        groupSizeMultiplier = 2.0;
+                                    } else if (maxGroupSize >= 4) {
+                                        groupSizeMultiplier = 1.5;
+                                    } else if (maxGroupSize >= 2) {
+                                        groupSizeMultiplier = 1.2;
+                                    }
+                                }
+                                // Grazers/prey always use 1.0x multiplier (no group bonus)
+                                
                                 let effectiveBirthRate = CONFIG.birthRate * sim.dynamicBirthRateMult * newNestBonus * groupSizeMultiplier;
                                 
                                 // GROUP SIZE ENERGY COST REDUCTION - Larger groups have lower mating energy costs
+                                
                                 // Energy cost reduction based on group size:
                                 // Solo (1): 0% reduction (full cost)
                                 // Small groups (2-3): 20% reduction
@@ -10415,7 +10482,7 @@
                                 // Solo agents (maxGroupSize = 1) have 0% reduction (full cost)
                                 
                                 let mateCost = CONFIG.mateCost * (1.0 - energyCostReduction);
-                                let cd = (300 / effectiveBirthRate) * (1.0 - wealthBonus); // Wealthy breed faster, groups breed faster
+                                let cd = (300 / effectiveBirthRate) * (1.0 - wealthBonus); // Wealthy breed faster
 
                                 this.energy -= mateCost; 
                                 this.mateCooldown = cd; 
@@ -10429,17 +10496,22 @@
                                 this.isMating = true;
                                 this.lastMatingFrame = (typeof sim !== 'undefined' && sim.frame) ? sim.frame : 0;
                                 
-                                // VFX - Heart particles
+                                // VFX - Heart particles (self-limiting to prevent particle explosion)
+                                // Only create particles if particle count is reasonable to prevent drawing issues
+                                if (typeof sim !== 'undefined' && sim.particles && sim.particles.length < 150) {
                                 sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ec4899', 'heart')); 
-                                sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ec4899', 'heart')); 
-                                
-                                // Additional romantic sparkles
-                                for (let i = 0; i < 3; i++) {
-                                    let angle = (i / 3) * Math.PI * 2;
-                                    let dist = 10 + Math.random() * 10;
-                                    let sparkleX = (this.pos.x + other.pos.x) / 2 + Math.cos(angle) * dist;
-                                    let sparkleY = (this.pos.y + other.pos.y) / 2 + Math.sin(angle) * dist;
-                                    sim.particles.push(new Particle(sparkleX, sparkleY, '#f472b6', 'star')); // Pink sparkles
+                                    sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ec4899', 'heart')); 
+                                    
+                                    // Additional romantic sparkles (only if particles are low)
+                                    if (sim.particles.length < 100) {
+                                        for (let i = 0; i < 3; i++) {
+                                            let angle = (i / 3) * Math.PI * 2;
+                                            let dist = 10 + Math.random() * 10;
+                                            let sparkleX = (this.pos.x + other.pos.x) / 2 + Math.cos(angle) * dist;
+                                            let sparkleY = (this.pos.y + other.pos.y) / 2 + Math.sin(angle) * dist;
+                                            sim.particles.push(new Particle(sparkleX, sparkleY, '#f472b6', 'star')); // Pink sparkles
+                                        }
+                                    }
                                 }
                                 
                                 return; 
@@ -10864,12 +10936,17 @@
                 superAgent.createInitialResources();
                 sim.particles.push(new Particle(center.x, center.y, '#f472b6', 'star'));
                 
-                // GROUP AGENT BIRTH SOUND - Play special positive ascending harmonic chord when group agent is formed
+                // GROUP AGENT FORMATION SOUND - Soft, gentle "ting" sound (pleasant, varies by group size)
                 if (typeof sfx !== 'undefined' && sfx.enabled) {
-                    setTimeout(() => sfx.play('bond', HARMONICS.A4, 0.15), 0);
-                    setTimeout(() => sfx.play('bond', HARMONICS.C5, 0.15), 50);
-                    setTimeout(() => sfx.play('bond', HARMONICS.E5, 0.15), 100);
-                    setTimeout(() => sfx.play('bond', HARMONICS.G5, 0.12), 150);
+                    // Vary note based on group size - larger groups get slightly higher notes
+                    // Use available harmonics for pleasant tones: C4, E4, A4, C5, E5, G5
+                    let groupSize = group.length;
+                    let noteOptions = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5];
+                    // Map group size to note: 2-3 = C4, 4-5 = E4, 6-7 = A4, 8-9 = C5, 10-11 = E5, 12+ = G5
+                    let noteIndex = Math.min(Math.floor((groupSize - 2) / 2), noteOptions.length - 1);
+                    let note = noteOptions[Math.max(0, noteIndex)];
+                    // Slightly louder, still gentle
+                    sfx.play('bond', note, 0.12, 0.2); // Volume 0.12, short duration (0.2s) for soft "ting"
                 }
                 
                 this.groupAscendedFrame = sim.frame;
@@ -11237,9 +11314,8 @@
                             // Reset food eaten counter
                             this.foodEaten = 0;
                             
-                            // VFX & SFX
+                            // VFX
                             sim.particles.push(new Particle(childX, childY, '#fde047', 'star'));
-                            sfx.play('birth', 480, 0.08); // Softer birth tone
                         }
                     }
                     return;
@@ -11291,7 +11367,6 @@
                             mate.energy -= 30;
                             
                             sim.particles.push(new Particle(childX, childY, '#dc2626', 'star'));
-                            sfx.play('birth', HARMONICS.G5, 0.08); // Harmonic birth tone
                         }
                     }
                     return;
@@ -11367,7 +11442,6 @@
                         mate.energy -= 20;
                         
                         sim.particles.push(new Particle(childX, childY, child.color, 'star'));
-                        sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5], 5), 0.08); // Harmonic birth tone
 
                     if (this.isGroupEntity || mate.isGroupEntity) {
                         let owner = this.isGroupEntity ? this : mate;
@@ -12612,7 +12686,8 @@
                     
                     // NEST BIRTH SOUND
                     if (typeof sfx !== 'undefined' && sfx.enabled) {
-                        sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1);
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1);
                     }
                     this.particles.push(new Particle(x, y, '#ffffff', 'spark'));
                     this.setStatusMessage(`🏠 NEST PLACED: ${tribeName} at (${Math.floor(x)}, ${Math.floor(y)})`, 300);
@@ -13125,7 +13200,9 @@
                         
                         // NEST BIRTH SOUND - Play birth-like tone when nest is created
                         if (typeof sfx !== 'undefined' && sfx.enabled) {
-                            sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1); // Harmonic birth tone
+                            // Vary birth tone - wider range
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // sfx.play('birth', getHarmonicFreq([HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 12), 0.1);
                         }
                         this.particles.push(new Particle(pos.x, pos.y, '#ffffff', 'spark'));
                     }
@@ -13165,7 +13242,10 @@
                         
                         prey.energy -= 40;
                         this.particles.push(new Particle(prey.pos.x, prey.pos.y, '#facc15', 'heart'));
-                        sfx.play('birth', HARMONICS.C5, 0.1); // Harmonic birth tone
+                        // Vary birth tone
+                        let birthNotes = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.E5];
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // sfx.play('birth', getHarmonicFreq(birthNotes, 6), 0.1);
                     }
                 });
                 
@@ -13218,7 +13298,10 @@
                         mate.mateCooldown = CONFIG.preyMateCooldown;
                         
                         this.particles.push(new Particle(offspring.pos.x, offspring.pos.y, '#facc15', 'heart'));
-                        sfx.play('birth', HARMONICS.C5_SHARP, 0.1); // Harmonic birth tone
+                        // Vary birth tone
+                        let birthNotes2 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.C5_SHARP, HARMONICS.E5];
+                        // TEMPORARILY DISABLED FOR TESTING
+                        // sfx.play('birth', getHarmonicFreq(birthNotes2, 6), 0.1);
                     }
                 });
                 
@@ -13274,7 +13357,6 @@
                         mate.mateCooldown = CONFIG.predatorMateCooldown;
                         
                         this.particles.push(new Particle(offspring.pos.x, offspring.pos.y, '#dc2626', 'heart'));
-                        sfx.play('birth', HARMONICS.E4, 0.1); // Harmonic birth tone
                     }
                 });
                 
@@ -13307,7 +13389,6 @@
                         this.agents.push(predator);
                         this.particles.push(new Particle(predator.pos.x, predator.pos.y, '#dc2626', 'spark'));
                     }
-                    sfx.play('birth', HARMONICS.E4, 0.1); // Harmonic birth tone
                 }
                 
                 // PREY SPAWNING IN GROUPS OF 3 NEAR HIGH FOOD CONCENTRATIONS
@@ -13348,7 +13429,6 @@
                                 this.agents.push(prey);
                                 this.particles.push(new Particle(prey.pos.x, prey.pos.y, '#facc15', 'spark'));
                             }
-                            sfx.play('birth', HARMONICS.C5, 0.1); // Harmonic birth tone
                         }
                     }
                 }
@@ -13453,7 +13533,9 @@
                                 newMerchant.health = 150;
                                 newMerchant.assignColor();
                                 this.particles.push(new Particle(newMerchant.pos.x, newMerchant.pos.y, '#be123c', 'coin'));
-                                sfx.play('trade', 460, 0.15);
+                                // Vary trade tone
+                                let tradeNotes3 = [HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                sfx.play('trade', getHarmonicFreq(tradeNotes3, 6), 0.15);
                             }
                         }
                     });
@@ -13614,13 +13696,17 @@
                 }
                 // CRITICAL: Always clean up particles every frame, even if not updated
                 // This prevents accumulation when update interval is > 1
-                if (this.particles.length > 500) {
-                    // If too many particles, aggressively clean up and cap at 300
+                // More aggressive capping during intense battles
+                if (this.particles.length > 300) {
+                    // If too many particles, aggressively clean up and cap at 200 (reduced from 300)
                     this.particles = this.particles.filter(p => p.life > 0.1);
-                    if (this.particles.length > 300) {
-                        // Keep only the newest particles (last 300)
-                        this.particles = this.particles.slice(-300);
+                    if (this.particles.length > 200) {
+                        // Keep only the newest particles (last 200)
+                        this.particles = this.particles.slice(-200);
                     }
+                } else if (this.particles.length > 200) {
+                    // Moderate cleanup when approaching limit
+                    this.particles = this.particles.filter(p => p.life > 0.2);
                 } else {
                     this.particles = this.particles.filter(p => p.life > 0);
                 }
@@ -14258,7 +14344,7 @@
                                         
                                         memberIndex += thisNestMembers;
                                         
-                                        // START RECONSTRUCTION FESTIVAL - 20x spawning for 100 frames
+                                        // START RECONSTRUCTION FESTIVAL - Note: This property is set but not currently used in spawning logic
                                         winnerNest.reconstructionFestival = 100;
                                         
                                         // Massive celebration VFX
@@ -14331,10 +14417,9 @@
                                 
                                 // Members already converted above, so no need to kill/disperse them
                                 
-                                // VFX & SFX
+                                // VFX
                                 this.particles.push(new Particle(nest.pos.x, nest.pos.y, '#dc2626', 'explosion'));
                                 this.particles.push(new Particle(nest.pos.x, nest.pos.y, '#9ca3af', 'smoke'));
-                                sfx.play('death', HARMONICS.E4, 0.2); // Harmonic death tone
                                 
                                 return; // Skip rest of update for this nest
                             }
@@ -14454,7 +14539,8 @@
                                 if (nest1 && nest2) {
                                     this.particles.push(new Particle(nest1.pos.x, nest1.pos.y, '#dc2626', 'lightning'));
                                     this.particles.push(new Particle(nest2.pos.x, nest2.pos.y, '#dc2626', 'lightning'));
-                                    sfx.play('attack', 250, 0.2);
+                                    // TEMPORARILY DISABLED FOR TESTING
+                                    // sfx.play('attack', 250, 0.2);
                                 }
                             }
                             
@@ -14566,7 +14652,12 @@
                                 // Declare war between the tribes
                                 this.tribes.tribes[n.tribeId].atWarWith[newTribeId] = true;
                                 this.tribes.tribes[newTribeId].atWarWith[n.tribeId] = true;
-                                sfx.play('attack', 350, 0.2);
+                                
+                                // WAR BOND CREATED - Dark ominous sound
+                                if (typeof sfx !== 'undefined' && sfx.enabled) {
+                                    // TEMPORARILY DISABLED FOR TESTING
+                    // sfx.play('death', HARMONICS.E4, 0.2); // Low, ominous war declaration sound
+                                }
                             } else {
                             // Set strong alliance between parent and colony
                             this.tribes.updateOpinion(n.tribeId, newTribeId, 80);
@@ -14576,11 +14667,6 @@
                             // Create new nest
                             let newNest = new Nest(pos.x, pos.y, newTribeId);
                             this.tribes.nests.push(newNest);
-                            
-                            // NEST BIRTH SOUND - Play birth-like tone when nest is created
-                            if (typeof sfx !== 'undefined' && sfx.enabled) {
-                                sfx.play('birth', getHarmonicFreq([HARMONICS.C5, HARMONICS.E5, HARMONICS.G5, HARMONICS.A5], 10), 0.1); // Harmonic birth tone
-                            }
                             
                             // Transfer wealth using CONFIG split ratio (parent keeps more, child gets less)
                             let childRatio = CONFIG.nestSplitChildReceive;
@@ -14704,8 +14790,11 @@
                                     nestsToRemove.push(smaller);
                                     
                                     // Visual feedback
+                                    // Self-limiting: Only create particles if particle count is reasonable
+                                    if (this.particles && this.particles.length < 150) {
                                     this.particles.push(new Particle(larger.pos.x, larger.pos.y, '#ffffff', 'heart'));
                                     this.particles.push(new Particle(smaller.pos.x, smaller.pos.y, '#ffffff', 'heart'));
+                                    }
                                     sfx.play('merge', 300, 0.4);
                                     
                                     // Break out of inner loop
@@ -14725,7 +14814,10 @@
                         // Festivals (High Wealth)
                         if (n.wealth > 500 && Math.random() < 0.01) {
                             n.wealth -= 100;
+                            // Self-limiting: Only create particle if particle count is reasonable
+                            if (sim.particles && sim.particles.length < 150) {
                             sim.particles.push(new Particle(n.pos.x, n.pos.y, '#ffffff', 'heart')); // Burst
+                            }
                             sim.agents.filter(a => a.tribeId === n.tribeId).forEach(a => {
                                 a.energy = Math.min(a.energy + 50, a.maxEnergy);
                                 a.health = Math.min(a.health + 20, a.maxHealth);
@@ -15091,14 +15183,14 @@
                                     let normalizedDir = bondLength > 0 ? new Vector(torusDir.x / bondLength, torusDir.y / bondLength) : new Vector(0, 0);
                                     
                                     // Draw blue striped line
-                                    ctx.beginPath();
-                                    ctx.moveTo(n1.pos.x, n1.pos.y);
+                                 ctx.beginPath();
+                                 ctx.moveTo(n1.pos.x, n1.pos.y);
                                     ctx.lineTo(n1.pos.x + torusDir.x, n1.pos.y + torusDir.y);
                                     let alpha = Math.min(0.8, dipBond / 80);
                                     ctx.strokeStyle = `rgba(59, 130, 246, ${alpha})`; // Blue
                                     ctx.lineWidth = Math.min(8, 1 + dipBond / 15);
                                     ctx.setLineDash([10, 5]); // Striped pattern
-                                    ctx.stroke();
+                                 ctx.stroke();
                                     ctx.setLineDash([]); // Reset
                                     
                                     // Animated purple dots moving along the bond in both directions
@@ -15338,17 +15430,22 @@
                         });
                         
                         // Draw particles (with reduced frequency for performance)
-                        let particleDrawInterval = 1;
-                        let totalAgentsForParticles = this.agents.length;
-                        if (totalAgentsForParticles > 120) {
-                            particleDrawInterval = 2;
-                        }
-                        if (this.frame % particleDrawInterval === 0) {
-                            this.particles.forEach(p => {
-                                if (isVisible(p.pos.x, p.pos.y, 2)) {
-                                    p.draw(this.ctx);
-                                }
-                            });
+                        // Skip drawing if too many particles to prevent drawing issues during battles
+                        if (this.particles.length < 250) {
+                            let particleDrawInterval = 1;
+                            let totalAgentsForParticles = this.agents.length;
+                            if (totalAgentsForParticles > 120) {
+                                particleDrawInterval = 2;
+                            }
+                            if (this.frame % particleDrawInterval === 0) {
+                                // Skip drawing some particles if there are many (draw every other one)
+                                let skipFactor = this.particles.length > 150 ? 2 : 1;
+                                this.particles.forEach((p, idx) => {
+                                    if (idx % skipFactor === 0 && isVisible(p.pos.x, p.pos.y, 2)) {
+                                        p.draw(this.ctx);
+                                    }
+                                });
+                            }
                         }
                         
                         this.ctx.restore(); // Restore context after drawing this world copy
@@ -15457,9 +15554,9 @@
                             this.ctx.restore();
                         }
                     }
-                    
-                    this.updateUI();
-                    this.frame++;
+
+                this.updateUI();
+                this.frame++;
                     requestAnimationFrame(() => this.loop());
                     return; // Skip this frame's update
                 }
@@ -15489,8 +15586,8 @@
                             this.plagues = this.plagues.filter(p => p.life > 0).slice(-15);
                         }
                     }
-                    
-                    requestAnimationFrame(() => this.loop());
+                
+                requestAnimationFrame(() => this.loop());
             }
         }
 
