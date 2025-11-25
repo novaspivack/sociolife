@@ -375,9 +375,9 @@
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
                         <span>Population Cap</span>
-                        <span id="val-popCap" class="text-blue-400 font-mono">170</span>
+                        <span id="val-popCap" class="text-blue-400 font-mono">400</span>
                     </div>
-                    <input type="range" min="20" max="300" step="10" oninput="sim.updateConfig('popCap', this.value)" id="in-popCap">
+                    <input type="range" min="20" max="500" step="10" oninput="sim.updateConfig('popCap', this.value)" id="in-popCap">
                 </div>
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
@@ -1092,7 +1092,7 @@
         /* --- CONFIGURATION --- */
         const DEFAULT_CONFIG = {
             popSize: 80,
-            popCap: 170, 
+            popCap: 400, // Hard cap to prevent performance issues 
             mutationRate: 0.35,
             learningRate: 0.1,
             resSpawnRate: 1.08, // Increased by 20% (was 0.9)
@@ -1150,6 +1150,9 @@
             groupAgentAscensionChance: 0.4,
             // Elastic bond max length for group agents
             groupAgentElasticBondMaxLength: 110,
+            // Group entity settings
+            groupEntityMaxSize: 10, // Maximum members before splitting
+            groupEntitySplitKeepSize: 5, // Number of members to keep when splitting
             stableGroupMinMembers: 2,
             stableGroupMaxMembers: 12,
             structureStabilityCap: 600,
@@ -2522,11 +2525,21 @@
                 this.lastToolSpawnFrame = 0;
                 this.toolIdCounter = 0;
                 this.babyBoom = 0; // Post-war baby boom counter (0 = inactive, >0 = active)
+                this.newbornBoost = 900; // NEWBORN BOOST: 3x spawn rate for 3x duration (900 frames = 3x the 300 frame baby boom)
                 
                 // Track tethered agents for regeneration
                 this.tetheredSoldierIds = []; // IDs of soldiers tethered to this nest
                 this.tetheredGuardianIds = []; // IDs of guardians tethered to this nest
                 this.lastTetheredCheckFrame = 0; // Frame when we last checked tethered agents
+                
+                // FEATURE: Tethered agent regeneration tracking
+                this.lastGuardianDeathFrame = -1000; // Frame when last guardian died
+                this.lastSoldierDeathFrame = -1000; // Frame when last soldier died
+                this.guardianRegenerationCooldown = 50; // Frames to wait before regenerating
+                this.soldierRegenerationCooldown = 50; // Frames to wait before regenerating
+                
+                // FEATURE: Spawn rotation - cycle through agent types in order
+                this.spawnRotationIndex = 0; // Current index in available roles list
             }
             update() {
                 // Check if nest is in baby boom (post-war reconstruction period)
@@ -2777,10 +2790,84 @@
                         spawnRate *= techSpawnBonus;
                     }
                     
-                    // Check for POST-WAR BABY BOOM - 5x spawning of all agent types (reduced by 50% for performance)
-                    let isInBabyBoom = this.babyBoom > 0;
+                    // FEATURE: Tethered agent regeneration - ensure every nest always has guardians/soldiers
+                    // Count current tethered agents
+                    let guardianCount = 0;
+                    let soldierCount = 0;
+                    if (sim.agents) {
+                        guardianCount = sim.agents.filter(a => a.role === 'Guardian' && a.tribeId === this.tribeId && !a.dead).length;
+                        soldierCount = sim.agents.filter(a => a.role === 'Soldier' && a.tribeId === this.tribeId && !a.dead).length;
+                    }
                     
-                    if (isInBabyBoom) {
+                    // Regenerate guardians if none exist and cooldown passed
+                    if (guardianCount === 0 && (sim.frame - this.lastGuardianDeathFrame) >= this.guardianRegenerationCooldown) {
+                        // Spawn 2 guardians
+                        for (let i = 0; i < 2; i++) {
+                            let agent = sim.spawnAgent('Guardian', this);
+                            if (agent) {
+                                agent.role = 'Guardian';
+                                agent.determineRole();
+                                let angle = (i / 2) * Math.PI * 2;
+                                let offset = 15 + Math.random() * 10;
+                                agent.pos.x += Math.cos(angle) * offset;
+                                agent.pos.y += Math.sin(angle) * offset;
+                                sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#fbbf24', 'star'));
+                            }
+                        }
+                    } else if (guardianCount === 0) {
+                        // Update death frame if guardians are missing
+                        this.lastGuardianDeathFrame = sim.frame;
+                    }
+                    
+                    // Regenerate soldiers if none exist and cooldown passed (only if tribe has combat tech)
+                    let tribeForSoldiers = sim.tribes && sim.tribes.tribes[this.tribeId];
+                    let hasCombatTech = tribeForSoldiers && tribeForSoldiers.techTier >= 1; // Soldiers require tech tier 1+
+                    if (hasCombatTech && soldierCount === 0 && (sim.frame - this.lastSoldierDeathFrame) >= this.soldierRegenerationCooldown) {
+                        // Spawn 2 soldiers
+                        for (let i = 0; i < 2; i++) {
+                            let agent = sim.spawnAgent('Soldier', this);
+                            if (agent) {
+                                agent.role = 'Soldier';
+                                agent.determineRole();
+                                let angle = (i / 2) * Math.PI * 2;
+                                let offset = 15 + Math.random() * 10;
+                                agent.pos.x += Math.cos(angle) * offset;
+                                agent.pos.y += Math.sin(angle) * offset;
+                                sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'spark'));
+                            }
+                        }
+                    } else if (hasCombatTech && soldierCount === 0) {
+                        // Update death frame if soldiers are missing
+                        this.lastSoldierDeathFrame = sim.frame;
+                    }
+                    
+                    // PERFORMANCE: Count active mating agents near nest to throttle spawning
+                    // Only count agents ACTIVELY mating (not just bonded or tethered)
+                    let activeMatingBondingCount = 0;
+                    if (sim.spatialGrid && sim.gridCols > 0) {
+                        let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.radius * 2);
+                        activeMatingBondingCount = nearby.agents.filter(a => 
+                            a.tribeId === this.tribeId && 
+                            !a.dead && 
+                            a.role !== 'Guardian' && a.role !== 'Soldier' && // Exclude tethered agents (they're just idle in nest)
+                            (a.state === 'Mating' || a.state === 'Courting' || a.state === 'Loving')
+                        ).length;
+                    }
+                    
+                    // THROTTLE: If too many agents are mating/bonding near nest, skip spawning this frame
+                    let spawnThrottleLimit = 10; // Don't spawn if 10+ agents are mating/bonding
+                    let shouldThrottleSpawning = activeMatingBondingCount >= spawnThrottleLimit;
+                    
+                    // Debug logging (only when throttling)
+                    if (sim.debugPerformance && shouldThrottleSpawning && sim.frame % 60 === 0) {
+                        console.log(`🚫 NEST SPAWN THROTTLE: Nest ${this.tribeId} has ${activeMatingBondingCount} agents mating/bonding (limit: ${spawnThrottleLimit})`);
+                    }
+                    
+                    // Check for POST-WAR BABY BOOM or NEWBORN BOOST
+                    let isInBabyBoom = this.babyBoom > 0;
+                    let isNewborn = this.newbornBoost > 0;
+                    
+                    if (isInBabyBoom && !shouldThrottleSpawning) {
                         // BABY BOOM - Massive spawning of ALL agent types
                         // Wealth factor is more generous - full rate at lower wealth threshold
                         let wealthFactor = Math.min(1.0, this.wealth / 200); // Full rate at 200+ wealth
@@ -2854,6 +2941,49 @@
                         }
                     }
                     
+                    // NEWBORN BOOST - Gradual spawning for new nests (3x rate for 3x duration)
+                    if (isNewborn && !isInBabyBoom && !shouldThrottleSpawning) { // Don't overlap with baby boom, throttle if too much mating
+                        let wealthFactor = Math.min(1.0, this.wealth / 200);
+                        let newbornSpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * 3.0; // 3x normal rate
+                        
+                        let minWealthForSpawn = 50;
+                        if (this.wealth >= minWealthForSpawn && Math.random() < newbornSpawnRate) {
+                            let tribe = sim.tribes && sim.tribes.tribes[this.tribeId];
+                            if (tribe && tribe.techTier !== undefined) {
+                                let allAvailableRoles = getAvailableRoles(tribe.techTier);
+                                let currentCounts = getRoleCounts(sim.agents, this.tribeId);
+                                let roleCaps = CONFIG.agentRoleCaps || {};
+                                let spawnRates = CONFIG.agentSpawnRates || {};
+                                
+                                // Spawn 1-2 agents per spawn event (gradual growth)
+                                let numToSpawn = Math.min(1 + Math.floor(Math.random() * 2), Math.floor(this.wealth / 50), 2);
+                                let spawnedCount = 0;
+                                
+                                for (let i = 0; i < numToSpawn && spawnedCount < 2 && this.wealth >= 30; i++) {
+                                    let role = weightedRandomRole(allAvailableRoles, currentCounts, roleCaps, spawnRates, { targetPerRole: 5 });
+                                    if (!role) break;
+                                    
+                                    let cap = roleCaps[role] || Infinity;
+                                    let current = currentCounts[role] || 0;
+                                    if (current >= cap) continue;
+                                    
+                                    let agent = sim.spawnAgent(role, this);
+                                    if (agent) {
+                                        agent.role = role;
+                                        agent.determineRole();
+                                        currentCounts[role] = (currentCounts[role] || 0) + 1;
+                                        
+                                        let angle = (spawnedCount / numToSpawn) * Math.PI * 2;
+                                        let offset = 20 + Math.random() * 15;
+                                        agent.pos.x += Math.cos(angle) * offset;
+                                        agent.pos.y += Math.sin(angle) * offset;
+                                        spawnedCount++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     // Check if tribe is at war - massively increase fighting role spawn rate
                     let isAtWar = false;
                     let warCount = 0;
@@ -2884,7 +3014,7 @@
                     }
                     
                     // ECONOMIC BOND BENEFITS - Increased spawning of money-making roles
-                    if (hasCommercialBonds && !isInBabyBoom) {
+                    if (hasCommercialBonds && !isInBabyBoom && !shouldThrottleSpawning) {
                         let moneyMakingRoles = ['Merchant', 'Artisan', 'Miner', 'Builder', 'Farmer'];
                         let economicSpawnBonus = 1.0 + (commercialBondCount * 0.15); // 15% per bond, modest increase
                         let economicSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * economicSpawnBonus;
@@ -2941,7 +3071,7 @@
                     }
                     
                     // WAR-TIME FIGHTING ROLE SPAWNING - 5x spawn rate for fighting roles during war (reduced by 50% for performance)
-                    if (isAtWar && !isInBabyBoom) {
+                    if (isAtWar && !isInBabyBoom && !shouldThrottleSpawning) {
                         let fightingRoleSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * 5.0; // 5x normal rate (reduced from 10x)
                         let fightingRoles = ['Soldier', 'Raider', 'Guardian'];
                         
@@ -2997,7 +3127,7 @@
                     }
                     
                     // Normal agent spawning (reduced priority during war, but still happens)
-                    if (Math.random() < spawnRate) {
+                    if (!shouldThrottleSpawning && Math.random() < spawnRate) {
                         let tribe = sim.tribes && sim.tribes.tribes[this.tribeId];
                         if (tribe && tribe.techTier !== undefined) {
                             // Use centralized function to get available roles
@@ -3022,87 +3152,68 @@
                                 );
                             }
                             
-                            // WORKFORCE MANAGEMENT: Use weighted random selection based on spawn rates
+                            // FEATURE: ROTATION-BASED SPAWNING - Cycle through agent types in order
                             // Get current agent counts by role for this tribe
                             let currentCounts = getRoleCounts(sim.agents, this.tribeId);
                             let roleCaps = CONFIG.agentRoleCaps || {};
-                            let spawnRates = CONFIG.agentSpawnRates || {};
                             
-                            // Define target workforce: 5 agents of each available role type (increased from 3)
-                            let targetPerRole = 5;
-                            
-                            // Build modifiers object
-                            let modifiers = {
-                                war: isAtWar,
-                                economic: hasCommercialBonds,
-                                hasTeachersScientists: hasTeachersScientists,
-                                hasNearbyBlocks: hasNearbyBlocks,
-                                targetPerRole: targetPerRole
-                            };
-                            
-                            // Spawn agents using weighted random selection (respects spawn rates and caps)
+                            // Spawn 2-3 agents of the current rotation role
                             let spawnedCount = 0;
-                            let maxSpawnPerEvent = 6; // Reduced from 18 - spawn fewer but smarter
+                            let numToSpawn = 2 + Math.floor(Math.random() * 2); // 2-3 agents
                             
-                            // Organize roles by tech tier for spawning order
-                            let rolesByTier = { 0: [], 1: [], 2: [] };
-                            allAvailableRoles.forEach(role => {
-                                let tier = getRequiredTechTier(role);
-                                if (rolesByTier[tier] === undefined) rolesByTier[tier] = [];
-                                rolesByTier[tier].push(role);
-                            });
+                            // Cycle through available roles in order
+                            let attempts = 0;
+                            let maxAttempts = allAvailableRoles.length; // Try each role once
                             
-                            // Spawn in tier order: 0, then 1, then 2
-                            for (let tier = 0; tier <= 2; tier++) {
-                                if (spawnedCount >= maxSpawnPerEvent) break;
-                                if (!rolesByTier[tier] || rolesByTier[tier].length === 0) continue;
+                            while (spawnedCount < numToSpawn && attempts < maxAttempts) {
+                                // Get current role from rotation
+                                let role = allAvailableRoles[this.spawnRotationIndex % allAvailableRoles.length];
                                 
-                                // Spawn 1-2 agents per tier, using weighted selection
-                                let tierSpawns = tier === 0 ? 2 : 1; // More basic roles, fewer advanced
-                                for (let i = 0; i < tierSpawns && spawnedCount < maxSpawnPerEvent; i++) {
-                                    let role = weightedRandomRole(rolesByTier[tier], currentCounts, roleCaps, spawnRates, modifiers);
-                                    if (role) {
-                                        // Check if we're at cap
-                                        let cap = roleCaps[role] || Infinity;
-                                        let current = currentCounts[role] || 0;
-                                        if (current >= cap) continue; // Skip if at cap
+                                // Check if at cap
+                                let cap = roleCaps[role] || Infinity;
+                                let current = currentCounts[role] || 0;
+                                
+                                if (current < cap) {
+                                    // Spawn this role
+                                    let agent = sim.spawnAgent(role, this);
+                                    if (agent) {
+                                        agent.role = role;
+                                        agent.determineRole();
+                                        // Slightly offset spawn positions so they don't overlap
+                                        let angle = (spawnedCount / numToSpawn) * Math.PI * 2;
+                                        let offset = 15 + Math.random() * 10;
+                                        agent.pos.x += Math.cos(angle) * offset;
+                                        agent.pos.y += Math.sin(angle) * offset;
                                         
-                                        let agent = sim.spawnAgent(role, this);
-                                        if (agent) {
-                                            agent.role = role;
-                                            agent.determineRole();
-                                            // Slightly offset spawn positions so they don't overlap
-                                            let angle = (spawnedCount / maxSpawnPerEvent) * Math.PI * 2;
-                                            let offset = 15 + Math.random() * 10;
-                                            agent.pos.x += Math.cos(angle) * offset;
-                                            agent.pos.y += Math.sin(angle) * offset;
-                                            
-                                            // Update counts
-                                            currentCounts[role] = (currentCounts[role] || 0) + 1;
-                                            
-                                            sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#60a5fa', 'spark'));
-                                            // Green spatter effect at nest position when spawning
-                                            if (spawnedCount === 0) { // Only add spatter once per spawn event
-                                                for (let i = 0; i < 8; i++) {
-                                                    let spatterAngle = (i / 8) * Math.PI * 2;
-                                                    let spatterDist = 5 + Math.random() * 10;
-                                                    sim.particles.push(new Particle(
-                                                        this.pos.x + Math.cos(spatterAngle) * spatterDist,
-                                                        this.pos.y + Math.sin(spatterAngle) * spatterDist,
-                                                        '#22c55e', 'spark'
-                                                    ));
-                                                }
-                                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
-                                                // SFX for normal spawning
-                                                // Vary spawn tone - use wider range of notes
-                                                let spawnNotes2 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
-                                                // TEMPORARILY DISABLED FOR TESTING
-                                                // sfx.play('spawn', getHarmonicFreq(spawnNotes2, 8), 0.06);
+                                        // Update counts
+                                        currentCounts[role] = (currentCounts[role] || 0) + 1;
+                                        
+                                        sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#60a5fa', 'spark'));
+                                        // Green spatter effect at nest position when spawning
+                                        if (spawnedCount === 0) { // Only add spatter once per spawn event
+                                            for (let i = 0; i < 8; i++) {
+                                                let spatterAngle = (i / 8) * Math.PI * 2;
+                                                let spatterDist = 5 + Math.random() * 10;
+                                                sim.particles.push(new Particle(
+                                                    this.pos.x + Math.cos(spatterAngle) * spatterDist,
+                                                    this.pos.y + Math.sin(spatterAngle) * spatterDist,
+                                                    '#22c55e', 'spark'
+                                                ));
                                             }
-                                            spawnedCount++;
+                                            sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
+                                            // SFX for normal spawning
+                                            // Vary spawn tone - use wider range of notes
+                                            let spawnNotes2 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                                            // TEMPORARILY DISABLED FOR TESTING
+                                            // sfx.play('spawn', getHarmonicFreq(spawnNotes2, 8), 0.06);
                                         }
+                                        spawnedCount++;
                                     }
                                 }
+                                
+                                // Move to next role in rotation
+                                this.spawnRotationIndex++;
+                                attempts++;
                             }
                         }
                     }
@@ -3111,22 +3222,22 @@
                 this.health = this.hp; // Sync health with hp
                 this.defenseLevel = Math.floor(this.hp / 500); 
                 
-                // Decrement baby boom counter and maintain prosperity bonus
+                // Decrement baby boom and newborn boost counters
                 if (this.babyBoom > 0) {
                     this.babyBoom--;
                     
-                    // CONTINUOUS HP REGENERATION during baby boom - Winners recover from war damage
+                    // CONTINUOUS HP REGENERATION during baby boom - Winners recover from war damage (REDUCED)
                     // War winners heal continuously during baby boom to survive the reconstruction period
-                    if (typeof sim !== 'undefined' && sim.frame % 20 === 0) { // Every 20 frames
+                    if (typeof sim !== 'undefined' && sim.frame % 30 === 0) { // Every 30 frames (REDUCED from 20)
                         // Regenerate HP (post-war reconstruction and healing)
-                        let hpRegen = Math.min(5, (this.maxHealth - this.hp) * 0.02); // Up to 5 HP per check, 2% of missing HP
+                        let hpRegen = Math.min(3, (this.maxHealth - this.hp) * 0.015); // REDUCED: Up to 3 HP per check, 1.5% of missing HP (was 5 HP, 2%)
                         this.hp = Math.min(this.maxHealth, this.hp + hpRegen);
                         this.health = Math.min(this.maxHealth, this.hp); // Sync health property
                     }
                     
-                    // CONTINUOUS WEALTH GENERATION during baby boom to support workforce (INCREASED)
+                    // CONTINUOUS WEALTH GENERATION during baby boom to support workforce (REDUCED)
                     // Baby boom nests generate wealth continuously to afford the larger population
-                    if (typeof sim !== 'undefined' && sim.frame % 10 === 0) { // Every 10 frames
+                    if (typeof sim !== 'undefined' && sim.frame % 20 === 0) { // Every 20 frames (REDUCED from 10)
                         // Base wealth generation increases with agent count (agents work to support the nest)
                         // PERFORMANCE: Use cached agent count
                         let agentCount = 0;
@@ -3139,11 +3250,11 @@
                                 agentCount = cached.count;
                             }
                         }
-                        let baseGeneration = 2 + (agentCount * 0.25); // PERFORMANCE: Reduced by 50% (was 4 + 0.5)
+                        let baseGeneration = 1 + (agentCount * 0.15); // REDUCED: Less wealth generation (was 2 + 0.25)
                         this.wealth += baseGeneration;
                         
-                        // Spawn resources frequently during baby boom (victory spoils continue to flow in)
-                        if (Math.random() < 0.175) { // PERFORMANCE: Reduced by 50% (was 0.35)
+                        // Spawn resources during baby boom (victory spoils continue to flow in)
+                        if (Math.random() < 0.08) { // REDUCED: Less frequent resource spawning (was 0.175)
                             let resourceTypes = ['FOOD', 'MAT', 'ORE', 'TREASURE'];
                             let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
                             sim.spawnResource(null, 
@@ -3154,13 +3265,13 @@
                         }
                     }
                     
-                    // MAINTAIN WEALTH AND PROSPERITY BONUS during baby boom (INCREASED TARGET)
-                    // Replenish coffers to 80% of max health periodically (every 50 frames, increased from 70%)
+                    // MAINTAIN WEALTH AND PROSPERITY BONUS during baby boom (REDUCED)
+                    // Replenish coffers periodically (every 50 frames)
                     if (this.babyBoom % 50 === 0) {
-                        let prosperityWealthTarget = this.maxHealth * 0.8; // INCREASED: 80% of max health (was 70%)
+                        let prosperityWealthTarget = this.maxHealth * 0.5; // REDUCED: 50% of max health (was 80%)
                         if (this.wealth < prosperityWealthTarget) {
-                            // Replenish to prosperity target
-                            let replenishAmount = prosperityWealthTarget - this.wealth;
+                            // Replenish to prosperity target (but only partially)
+                            let replenishAmount = (prosperityWealthTarget - this.wealth) * 0.5; // REDUCED: Only 50% of the gap
                             this.wealth += replenishAmount;
                             
                             // Occasional prosperity VFX
@@ -3186,6 +3297,11 @@
                             }
                         }
                     }
+                    }
+                
+                // Decrement newborn boost counter
+                if (this.newbornBoost > 0) {
+                    this.newbornBoost--;
                 }
                 
                 // SURVIVAL MECHANISM - Dying nests raise taxes and increase workforce
@@ -3287,56 +3403,56 @@
                             }
                         }
                         
-                        // 2. INCREASE WORKFORCE - Spawn more resource-gathering agents
-                        // Distressed nests spawn workers at 3-5x normal rate
-                        let emergencySpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * (3 + distressLevel * 2); // 3-5x
-                        if (Math.random() < emergencySpawnRate) {
-                            let workerRoles = ['Gatherer', 'Miner', 'Farmer', 'Builder'];
-                            let role = workerRoles[Math.floor(Math.random() * workerRoles.length)];
-                            let newAgent = sim.spawnAgent(role, this);
-                            if (newAgent) {
-                                newAgent.role = role;
-                                newAgent.determineRole();
-                                // VFX for emergency worker spawn
-                                sim.particles.push(new Particle(newAgent.pos.x, newAgent.pos.y, '#f59e0b', 'spark'));
-                                // Green spatter effect at nest position when spawning
-                                for (let i = 0; i < 8; i++) {
-                                    let spatterAngle = (i / 8) * Math.PI * 2;
-                                    let spatterDist = 5 + Math.random() * 10;
-                                    sim.particles.push(new Particle(
-                                        this.pos.x + Math.cos(spatterAngle) * spatterDist,
-                                        this.pos.y + Math.sin(spatterAngle) * spatterDist,
-                                        '#22c55e', 'spark'
-                                    ));
-                                }
-                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
-                                // SFX for emergency spawning
-                                // Vary spawn tone - use wider range of notes
-                                let spawnNotes3 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5, HARMONICS.G5];
-                                // TEMPORARILY DISABLED FOR TESTING
-                                // sfx.play('spawn', getHarmonicFreq(spawnNotes3, 10), 0.1);
+                    // 2. INCREASE WORKFORCE - Spawn more resource-gathering agents
+                    // Distressed nests spawn workers at 3-5x normal rate
+                    let emergencySpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * (3 + distressLevel * 2); // 3-5x
+                    if (Math.random() < emergencySpawnRate) {
+                        let workerRoles = ['Gatherer', 'Miner', 'Farmer', 'Builder'];
+                        let role = workerRoles[Math.floor(Math.random() * workerRoles.length)];
+                        let newAgent = sim.spawnAgent(role, this);
+                        if (newAgent) {
+                            newAgent.role = role;
+                            newAgent.determineRole();
+                            // VFX for emergency worker spawn
+                            sim.particles.push(new Particle(newAgent.pos.x, newAgent.pos.y, '#f59e0b', 'spark'));
+                            // Green spatter effect at nest position when spawning
+                            for (let i = 0; i < 8; i++) {
+                                let spatterAngle = (i / 8) * Math.PI * 2;
+                                let spatterDist = 5 + Math.random() * 10;
+                                sim.particles.push(new Particle(
+                                    this.pos.x + Math.cos(spatterAngle) * spatterDist,
+                                    this.pos.y + Math.sin(spatterAngle) * spatterDist,
+                                    '#22c55e', 'spark'
+                                ));
                             }
+                            sim.particles.push(new Particle(this.pos.x, this.pos.y, '#10b981', 'explosion')); // Green explosion
+                            // SFX for emergency spawning
+                            // Vary spawn tone - use wider range of notes
+                            let spawnNotes3 = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5, HARMONICS.G5];
+                            // TEMPORARILY DISABLED FOR TESTING
+                            // sfx.play('spawn', getHarmonicFreq(spawnNotes3, 10), 0.1);
                         }
-                        
-                        // 3. INCREASE RESOURCE PRODUCTION - Spawn resources directly
-                        // Distressed nests produce resources at 2-4x normal rate
-                        if (Math.random() < (0.15 * (1 + distressLevel * 2))) { // 15-45% chance
-                            let resourceTypes = ['FOOD', 'MAT', 'ORE'];
-                            let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
-                            sim.spawnResource(null, 
-                                this.pos.x + (Math.random() * 60 - 30),
-                                this.pos.y + (Math.random() * 60 - 30),
-                                resourceType, false, this.tribeId
-                            );
-                            // VFX for emergency resource production
-                            if (Math.random() < 0.3) {
-                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ef4444', 'spark'));
-                                // SFX for emergency resource production
-                                // Vary collect tone
-                                let collectNotes = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
-                                sfx.play('collect', getHarmonicFreq(collectNotes, 8), 0.08);
-                            }
+                    }
+                    
+                    // 3. INCREASE RESOURCE PRODUCTION - Spawn resources directly
+                    // Distressed nests produce resources at 2-4x normal rate
+                    if (Math.random() < (0.15 * (1 + distressLevel * 2))) { // 15-45% chance
+                        let resourceTypes = ['FOOD', 'MAT', 'ORE'];
+                        let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
+                        sim.spawnResource(null, 
+                            this.pos.x + (Math.random() * 60 - 30),
+                            this.pos.y + (Math.random() * 60 - 30),
+                            resourceType, false, this.tribeId
+                        );
+                        // VFX for emergency resource production
+                        if (Math.random() < 0.3) {
+                            sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ef4444', 'spark'));
+                            // SFX for emergency resource production
+                            // Vary collect tone
+                            let collectNotes = [HARMONICS.C4, HARMONICS.E4, HARMONICS.A4, HARMONICS.C5, HARMONICS.D5, HARMONICS.E5];
+                            sfx.play('collect', getHarmonicFreq(collectNotes, 8), 0.08);
                         }
+                    }
                     }
                 }
                 
@@ -3698,18 +3814,18 @@
                         console.log(`Nest of tribe ${this.tribeId} destroyed! No war winners - ${scatterCount} resources scattered widely around nest location.`);
                     }
                     
-                    // Mark nest for removal
-                    this.hp = 0;
-                    this.wealth = 0;
-                    
-                    // Trigger aggressive cleanup after nest death
-                    if (typeof sim !== 'undefined' && sim._cleanupAfterLargeDieOff) {
-                        sim._cleanupAfterLargeDieOff();
-                    }
-                    
-                    // VFX
-                    sim.particles.push(new Particle(this.pos.x, this.pos.y, '#dc2626', 'explosion'));
-                    sim.particles.push(new Particle(this.pos.x, this.pos.y, '#9ca3af', 'smoke'));
+                // Mark nest for removal
+                this.hp = 0;
+                this.wealth = 0;
+                
+                // Trigger aggressive cleanup after nest death
+                if (typeof sim !== 'undefined' && sim._cleanupAfterLargeDieOff) {
+                    sim._cleanupAfterLargeDieOff();
+                }
+                
+                // VFX
+                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#dc2626', 'explosion'));
+                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#9ca3af', 'smoke'));
                 } 
                 
                 // Nest drift based on tribal relations, diplomatic and commercial bonds
@@ -3735,7 +3851,7 @@
                         driftForce.mult(0.005);
                         // Apply drift and wrap position directly using Vector method
                         this.pos.add(driftForce);
-                        this.pos.wrap(sim.width, sim.height);
+                            this.pos.wrap(sim.width, sim.height);
                         
                         let newX = this.pos.x;
                         let newY = this.pos.y;
@@ -3788,12 +3904,12 @@
                             
                             // Recalculate position with bounce and wrap
                             this.pos.add(this.driftMomentum);
-                            this.pos.wrap(sim.width, sim.height);
+                                this.pos.wrap(sim.width, sim.height);
                             
                             newX = this.pos.x;
                             newY = this.pos.y;
+                            }
                         }
-                    }
                     }
                 }
                 this.updateTools(sim);
@@ -4009,8 +4125,8 @@
                     if (this.tools.length > config.maxPerNest) {
                         this.tools.shift();
                     }
-                            }
-                        }
+                }
+            }
             canSpawnTool(def, tribe) {
                 if (this.hp < def.minHp) return false;
                 if (this.wealth < def.wealthCost) return false;
@@ -4347,12 +4463,12 @@
                 // FIX: Create nests at world center (0,0) initially, will be repositioned in init()
                 for(let i=0; i<count; i++) {
                     let tid = this.createTribe(bases[i%bases.length] + ' ' + suffixes[i%suffixes.length], colors[i%colors.length]);
-                    // Start at origin, spread in a circle
+                    // Start at origin, spread in a circle with maximum spacing
                     let angle = (i / count) * Math.PI * 2;
-                    let radius = 200;
+                    let radius = 600; // Increased from 400 for even more spacing
                     let preferredX = Math.cos(angle) * radius;
                     let preferredY = Math.sin(angle) * radius;
-                    let pos = this.findValidNestPosition(preferredX, preferredY);
+                    let pos = this.findValidNestPosition(preferredX, preferredY, 450); // Increased min distance to 450
                     let newNest = new Nest(pos.x, pos.y, tid);
                     this.nests.push(newNest);
                     
@@ -5290,6 +5406,7 @@
                 this.carrying = null;
                 this.home = null; 
                 this.partners = []; 
+                this.bondCooldown = 0; // FEATURE: Cooldown before agent can bond again
                 this.lastPos = new Vector(x, y);
                 this.stuckCounter = 0;
                 this.targetId = null;
@@ -5385,7 +5502,8 @@
                 
                 // Bond types: Each partner has a bond type with different effects
                 this.bondTypes = {}; // Map from partner ID to bond type
-                this.rigidBonds = {}; // Map from partner ID to rigid bond type ('shield', 'hunt', 'gather', 'swift', null) 
+                this.rigidBonds = {}; // Map from partner ID to rigid bond type ('shield', 'hunt', 'gather', 'swift', null)
+                this.hasGeometricBonds = false; // FEATURE: Track if agent has sprouted geometric molecular structure 
 
                 this.prefs = {
                     hunt: 1.0,
@@ -5739,11 +5857,11 @@
                     
                     // Add this agent's partners to check (only if not too deep)
                     if (depth < MAX_DEPTH - 1) {
-                        for (let partner of agent.partners) {
+                    for (let partner of agent.partners) {
                             if (!checked.has(partner) && group.size < MAX_GROUP_SIZE) {
-                                toCheck.push(partner);
-                            }
+                            toCheck.push(partner);
                         }
+                    }
                     }
                     depth++;
                 }
@@ -6156,6 +6274,9 @@
                 
                 if (this.mateCooldown > 0) this.mateCooldown--;
                 
+                // FEATURE: Bond cooldown decrement
+                if (this.bondCooldown > 0) this.bondCooldown--;
+                
                 // Health-based death rate: healthier agents live longer
                 // Calculate health ratio (0.0 to 1.0)
                 let healthRatio = this.health / this.maxHealth;
@@ -6285,8 +6406,8 @@
                     
                     partnersToCheck.forEach(p => {
                         if (!p || p.dead || p.tribeId === -1 || p.role === 'Monster') return;
-                        tribeCounts[p.tribeId] = (tribeCounts[p.tribeId] || 0) + 1;
-                        totalBonded++;
+                            tribeCounts[p.tribeId] = (tribeCounts[p.tribeId] || 0) + 1;
+                            totalBonded++;
                     });
                     
                     // Find majority tribe
@@ -6313,9 +6434,22 @@
                 }
 
                 if (this.lifespan <= 0 && this.role !== 'Monster') {
-                    this.dead = true;
-                    this.breakAllBonds();
-                    return;
+                    // FEATURE: SuperAgents are immortal as long as they have energy
+                    if (this.isSuperAgent && this.energy > 0) {
+                        this.lifespan = 100; // Reset lifespan - they don't age
+                        return; // Continue living
+                    }
+                    
+                    // FEATURE: Leaders cannot die from old age - only if nest dies
+                    let isLeader = this.tribeId !== -1 && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id;
+                    if (!isLeader) {
+                        this.dead = true;
+                        this.breakAllBonds();
+                        return;
+                    } else {
+                        // Leader reached max age - reset lifespan to keep them alive
+                        this.lifespan = 100; // Give them more time
+                    }
                 }
 
                 if (Vector.dist(this.pos, this.lastPos) < 1.0) this.stuckCounter++;
@@ -6340,14 +6474,14 @@
                     
                     partnersForEnergy.forEach(p => {
                         if (!p || p.dead) return;
-                        if (this.isAdult() && !p.isAdult() && this.energy > 50) {
-                            let flow = 5;
-                            this.energy -= flow;
-                            p.energy += flow;
+                            if (this.isAdult() && !p.isAdult() && this.energy > 50) {
+                                let flow = 5;
+                                this.energy -= flow;
+                                p.energy += flow;
                         } else if (this.energy > p.energy) {
-                            let flow = (this.energy - p.energy) * 0.05; 
-                            this.energy -= flow;
-                            p.energy += flow;
+                                let flow = (this.energy - p.energy) * 0.05; 
+                                this.energy -= flow;
+                                p.energy += flow;
                         }
                     });
                 }
@@ -6583,9 +6717,129 @@
                         this.health += 0.02 * (structureBonus - 1) * structureBandFactor;
                     }
                 }
-                if (this.isGroupEntity) {
-                    cost *= Math.max(0.1, CONFIG.groupAgentEnergyCostMult);
+                if (this.isSuperAgent) {
+                    // FEATURE: SuperAgents consume energy 5x slower (20% of normal cost)
+                    cost *= 0.2;
                     this.maxLifespan = Math.max(this.maxLifespan, this.baseMaxLifespan * CONFIG.groupAgentLifespanMult);
+                    
+                    // FEATURE: Geometric Molecular Structure - SuperAgents can sprout rigid bonds in geometric patterns
+                    // Only if: mature enough, no existing geometric bonds, and has no rigid bonds yet
+                    let hasAnyRigidBonds = Object.keys(this.rigidBonds).length > 0;
+                    let isOldEnough = this.age > 200; // LOWERED: Must be above basic lifetime (was 500)
+                    
+                    // Debug: Log SuperAgent status once per 300 frames
+                    // Debug logging disabled
+                    // if (typeof sim !== 'undefined' && sim.frame % 300 === 0 && sim.debugPerformance) {
+                    //     console.log(`🔷 SuperAgent ID=${this.id}: age=${this.age.toFixed(0)}, hasGeoBonds=${this.hasGeometricBonds}, rigidBonds=${Object.keys(this.rigidBonds).length}, oldEnough=${isOldEnough}, eligible=${!this.hasGeometricBonds && !hasAnyRigidBonds && isOldEnough}`);
+                    // }
+                    
+                    if (!this.hasGeometricBonds && !hasAnyRigidBonds && isOldEnough && typeof sim !== 'undefined') {
+                        // Chance to sprout geometric bonds (check once per 60 frames)
+                        if (sim.frame % 60 === 0) {
+                            let roll = Math.random();
+                            // Debug logging removed
+                            if (roll < 0.20) { // 20% chance per check
+                                // FEATURE: SuperAgents always create exactly 3 bonds at triangle vertices
+                                let numBonds = 3; // Always 3 bonds for triangular structure
+                                
+                                // Create new agents at triangle vertices (matching the visual triangle)
+                                let bondRadius = 20; // SHORT distance from center (was 30)
+                                let angle1 = -Math.PI / 2; // Top vertex
+                                let angle2 = angle1 + (2 * Math.PI / 3); // Bottom right
+                                let angle3 = angle2 + (2 * Math.PI / 3); // Bottom left
+                                let angles = [angle1, angle2, angle3];
+                                let newAgents = [];
+                                
+                                for (let i = 0; i < numBonds; i++) {
+                                    let angle = angles[i];
+                                    let x = this.pos.x + Math.cos(angle) * bondRadius;
+                                    let y = this.pos.y + Math.sin(angle) * bondRadius;
+                                    
+                                    // Create new agent with random DNA (pass null to use defaults)
+                                    let newAgent = new Agent(x, y, null, null, this.tribeId);
+                                    
+                                    // Assign random role from available roles
+                                    let availableRoles = ['Gatherer', 'Scout', 'Soldier', 'Miner', 'Farmer', 'Botanist'];
+                                    newAgent.role = availableRoles[Math.floor(Math.random() * availableRoles.length)];
+                                    newAgent.age = 100; // Start mature
+                                    newAgent.assignColor();
+                                    sim.agents.push(newAgent);
+                                    newAgents.push(newAgent);
+                                    
+                                    // Create rigid bond
+                                    this.addPartner(newAgent, 'rigid');
+                                    this.rigidBonds[newAgent.id] = 'geometric';
+                                    newAgent.rigidBonds[this.id] = 'geometric';
+                                }
+                                
+                                // Mark as having geometric bonds
+                                this.hasGeometricBonds = true;
+                                
+                                // Store neighbor relationships for mutual repulsion
+                                // Each agent repels its two geometric neighbors to maintain angles
+                                for (let i = 0; i < newAgents.length; i++) {
+                                    let leftNeighbor = newAgents[(i - 1 + numBonds) % numBonds];
+                                    let rightNeighbor = newAgents[(i + 1) % numBonds];
+                                    newAgents[i].geometricNeighbors = [leftNeighbor.id, rightNeighbor.id];
+                                    newAgents[i].geometricCenter = this.id; // Store center agent ID
+                                    newAgents[i].geometricBondCount = numBonds; // Store total bond count for repulsion strength
+                                }
+                                
+                                // FEATURE: SuperAgent inherits abilities from its three bonded agents
+                                this.vertexAgents = newAgents; // Store references to vertex agents
+                                this.vertexRoles = newAgents.map(a => a.role); // Store their roles
+                                
+                                // Grant combined abilities based on vertex agent roles
+                                for (let agent of newAgents) {
+                                    if (agent.role === 'Soldier') {
+                                        this.canShootRanged = true; // Gain ranged combat
+                                    }
+                                    if (agent.role === 'Botanist') {
+                                        this.hasBotanistAbility = true; // Can spawn food
+                                    }
+                                    if (agent.role === 'Scientist') {
+                                        this.hasScientistAbility = true; // Can boost tribe tech
+                                    }
+                                    if (agent.role === 'Miner') {
+                                        this.hasMinerAbility = true; // Better resource detection
+                                    }
+                                    if (agent.role === 'Farmer') {
+                                        this.hasFarmerAbility = true; // Can spawn grazers
+                                    }
+                                    if (agent.role === 'Scout') {
+                                        this.hasScoutAbility = true; // Extra vision
+                                    }
+                                }
+                                
+                                // Visual effect
+                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#a855f7', 'explosion'));
+                                
+                                // Logging removed
+                                // let rolesList = newAgents.map(a => a.role).join(', ');
+                                // console.log(`✅ GEOMETRIC BONDS COMPLETE: Created ${numBonds} bonds with roles: ${rolesList}`);
+                            }
+                        }
+                    }
+                    
+                    // FEATURE: Apply geometric neighbor repulsion to maintain angles
+                    // This happens every frame for agents with geometric neighbors
+                    // Repulsion strength inversely proportional to number of bonds (fewer bonds = stronger repulsion)
+                    if (this.geometricNeighbors && this.geometricNeighbors.length === 2 && typeof sim !== 'undefined') {
+                        // Calculate repulsion strength based on bond count
+                        // 2 bonds = 4.0x strength, 3 bonds = 2.67x, 4 bonds = 2.0x, 5 bonds = 1.6x, 6 bonds = 1.33x, 8 bonds = 1.0x
+                        let repulsionStrength = this.geometricBondCount ? (8.0 / this.geometricBondCount) : 1.0;
+                        
+                        for (let neighborId of this.geometricNeighbors) {
+                            let neighbor = sim.agents.find(a => a.id === neighborId);
+                            if (neighbor && !neighbor.dead) {
+                                let dist = Vector.dist(this.pos, neighbor.pos);
+                                if (dist < 40 && dist > 0) { // Repel if too close
+                                    let repulsion = Vector.sub(this.pos, neighbor.pos).normalize().mult(0.5 * repulsionStrength);
+                                    this.vel.add(repulsion);
+                                }
+                            }
+                        }
+                    }
                 }
                 if (this.frenzyTimer > 0) { cost *= 2; this.frenzyTimer--; }
                 // Garbage Collectors are very energy efficient
@@ -6643,17 +6897,30 @@
                         }
                     }
                     
-                    if (this.carrying) {
-                        this.carrying.carrier = null; 
-                        this.carrying = null;
+                    // FEATURE: SuperAgents are immortal as long as they have energy
+                    if (this.isSuperAgent && this.energy > 0) {
+                        this.health = 50; // Restore health - they don't die from damage
+                        return; // Continue living
                     }
-                    this.dead = true;
-                    this.breakAllBonds();
-                    this.spawnDeathResource();
-                    this.spawnDeathFoodBurst();
-                    this.spawnGroupAgentBabies(sim);
-                    sim.particles.push(new Particle(this.pos.x, this.pos.y, '#fff', 'skull'));
-                    return;
+                    
+                    // FEATURE: Leaders cannot die from health - only if nest dies
+                    let isLeader = this.tribeId !== -1 && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id;
+                    if (!isLeader) {
+                        if (this.carrying) {
+                            this.carrying.carrier = null; 
+                            this.carrying = null;
+                        }
+                        this.dead = true;
+                        this.breakAllBonds();
+                        this.spawnDeathResource();
+                        this.spawnDeathFoodBurst();
+                        this.spawnGroupAgentBabies(sim);
+                        sim.particles.push(new Particle(this.pos.x, this.pos.y, '#fff', 'skull'));
+                        return;
+                    } else {
+                        // Leader at 0 health - heal them to keep alive
+                        this.health = 50; // Restore some health
+                    }
                 }
 
                 this.interact(resources, agents, doExpensiveOps);
@@ -6661,9 +6928,615 @@
                 
                 // SUPERAGENTS: No expensive group calculations needed - abilities are baked in
                 if (this.isSuperAgent) {
-                    // SuperAgents are just regular agents with enhanced stats - no special processing needed
+                    // SuperAgents have enhanced stats and intelligent behaviors
                     // All synergies and capabilities are already applied to their stats
+                    
+                    // FEATURE: SuperAgent behaviors - hunt, evade, avoid nests
+                    let superAgentForce = new Vector(0, 0);
+                    let behaviorActive = false;
+                    
+                    // 1. AVOID NESTS - ABSOLUTE HIGHEST PRIORITY - MUST FLEE FROM ALL NESTS
+                    let nestAvoidanceForce = new Vector(0, 0);
+                    let nearAnyNest = false;
+                    if (typeof sim !== 'undefined' && sim.tribes && sim.tribes.nests) {
+                        for (let nest of sim.tribes.nests) {
+                            let distToNest = Vector.dist(this.pos, nest.pos);
+                            // MASSIVE avoidance range - 10x nest radius!
+                            if (distToNest < nest.radius * 10.0) {
+                                nearAnyNest = true;
+                                let awayFromNest = Vector.sub(this.pos, nest.pos);
+                                if (awayFromNest.mag() > 0) {
+                                    // EXTREME avoidance - inverse square law with MUCH stronger force
+                                    let urgency = Math.min(50.0, (nest.radius * 10.0) / Math.max(1, distToNest));
+                                    awayFromNest.normalize().mult(urgency * 5.0); // Up to 250x force!
+                                    nestAvoidanceForce.add(awayFromNest);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If near any nest, ONLY apply nest avoidance (ignore all other behaviors)
+                    if (nearAnyNest && nestAvoidanceForce.mag() > 0) {
+                        superAgentForce = nestAvoidanceForce; // Override everything else
+                        behaviorActive = true;
+                        this.state = "FLEEING NEST";
+                        
+                        // IMMEDIATE velocity adjustment - don't wait for force accumulation
+                        // Add direct velocity push away from nests
+                        let escapeVelocity = nestAvoidanceForce.copy().normalize().mult(2.0);
+                        this.vel.add(escapeVelocity);
+                    }
+                    
+                    // 2. DETECT BEING HUNTED & EVADE - Check if enemy SuperAgents are approaching
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents) {
+                        let hunters = sim.agents.filter(a => 
+                            !a.dead && 
+                            a !== this && 
+                            a.isSuperAgent && // Only SuperAgents are threats
+                            a.tribeId !== this.tribeId && 
+                            a.tribeId !== -1 &&
+                            Vector.dist(this.pos, a.pos) < this.senseRad * 1.5 // Extended detection range for SuperAgents
+                        );
+                        
+                        // Detect if being hunted: enemy SuperAgent is moving toward us
+                        for (let hunter of hunters) {
+                            let toMe = Vector.sub(this.pos, hunter.pos);
+                            let toMeNorm = toMe.copy().normalize();
+                            let hunterVel = hunter.vel.copy().normalize();
+                            // Calculate dot product manually: a·b = ax*bx + ay*by
+                            let dotProduct = toMeNorm.x * hunterVel.x + toMeNorm.y * hunterVel.y;
+                            
+                            // If hunter is moving toward me (dot product > 0.5 = within 60 degrees)
+                            if (dotProduct > 0.5) {
+                                let awayFromHunter = Vector.sub(this.pos, hunter.pos);
+                                if (awayFromHunter.mag() > 0) {
+                                    awayFromHunter.normalize().mult(3.5); // Strong evasion!
+                                    superAgentForce.add(awayFromHunter);
+                                    behaviorActive = true;
+                                    this.state = "Evading Hunter";
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Also hunt/evade enemy SuperAgents from different tribes
+                        if (!behaviorActive) {
+                            let enemySuperAgents = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.tribeId !== this.tribeId && 
+                                a.tribeId !== -1 &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 0.8
+                            );
+                            
+                            if (enemySuperAgents.length > 0) {
+                                let closestEnemy = enemySuperAgents.sort((a, b) => 
+                                    Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                                )[0];
+                                
+                                // Calculate strength to decide hunt or evade
+                                let myStrength = this.health + this.energy + (this.age * 0.1);
+                                let theirStrength = closestEnemy.health + closestEnemy.energy + (closestEnemy.age * 0.1);
+                                let dist = Vector.dist(this.pos, closestEnemy.pos);
+                                
+                                if (myStrength > theirStrength * 1.1) {
+                                    // I'm stronger - hunt them!
+                                    let towardEnemy = Vector.sub(closestEnemy.pos, this.pos);
+                                    if (towardEnemy.mag() > 0) {
+                                        towardEnemy.normalize().mult(3.0); // Strong pursuit
+                                        superAgentForce.add(towardEnemy);
+                                        behaviorActive = true;
+                                        this.state = "Hunting Enemy SuperAgent";
+                                        
+                                        // COMBAT: Attack when close
+                                        if (dist < this.radius + closestEnemy.radius + 10) {
+                                            let strengthRatio = myStrength / Math.max(1, theirStrength);
+                                            let damage = 12 * strengthRatio; // High damage
+                                            closestEnemy.health -= damage;
+                                            this.energy -= 2;
+                                            
+                                            if (sim.particles && sim.particles.length < 200) {
+                                                sim.addCombatParticle(closestEnemy.pos.x, closestEnemy.pos.y, '#dc2626', 'explosion');
+                                            }
+                                            this.state = "ATTACKING Enemy SuperAgent";
+                                        }
+                                    }
+                                } else {
+                                    // They're stronger - evade!
+                                    let awayFromEnemy = Vector.sub(this.pos, closestEnemy.pos);
+                                    if (awayFromEnemy.mag() > 0) {
+                                        awayFromEnemy.normalize().mult(3.5); // Strong evasion
+                                        superAgentForce.add(awayFromEnemy);
+                                        behaviorActive = true;
+                                        this.state = "Evading Enemy SuperAgent";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 3. HUNT/EVADE OTHER SUPERAGENTS - Class-based love/hate behavior
+                    // Class A: hates B, loves C
+                    // Class B: hates C, loves A
+                    // Class C: hates A, loves B
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents && this.superAgentClass) {
+                        let otherSuperAgents = sim.agents.filter(a => 
+                            !a.dead && 
+                            a !== this && 
+                            a.isSuperAgent &&
+                            a.superAgentClass && // Must have a class
+                            Vector.dist(this.pos, a.pos) < this.senseRad * 2.0 // Long range detection
+                        );
+                        
+                        if (otherSuperAgents.length > 0) {
+                            // Determine love/hate relationships based on class
+                            let getRelationship = (myClass, theirClass) => {
+                                if (myClass === 'A') return theirClass === 'B' ? 'hate' : (theirClass === 'C' ? 'love' : 'neutral');
+                                if (myClass === 'B') return theirClass === 'C' ? 'hate' : (theirClass === 'A' ? 'love' : 'neutral');
+                                if (myClass === 'C') return theirClass === 'A' ? 'hate' : (theirClass === 'B' ? 'love' : 'neutral');
+                                return 'neutral';
+                            };
+                            
+                            // Find targets to hunt (hated class) and mates to seek (loved class)
+                            let huntTarget = null;
+                            let evadeTarget = null;
+                            let mateTarget = null;
+                            let minHuntDist = Infinity;
+                            let minEvadeDist = Infinity;
+                            let minMateDist = Infinity;
+                            
+                            for (let other of otherSuperAgents) {
+                                let relationship = getRelationship(this.superAgentClass, other.superAgentClass);
+                                let dist = Vector.dist(this.pos, other.pos);
+                                
+                                if (relationship === 'hate') {
+                                    // Calculate relative strength
+                                    let myStrength = this.health + this.energy + (this.age * 0.1);
+                                    let theirStrength = other.health + other.energy + (other.age * 0.1);
+                                    
+                                    if (myStrength > theirStrength * 1.2) {
+                                        // I'm stronger - hunt them!
+                                        if (dist < minHuntDist) {
+                                            minHuntDist = dist;
+                                            huntTarget = other;
+                                        }
+                                    } else if (theirStrength > myStrength * 1.2) {
+                                        // They're stronger - evade them!
+                                        if (dist < minEvadeDist) {
+                                            minEvadeDist = dist;
+                                            evadeTarget = other;
+                                        }
+                                    } else {
+                                        // Similar strength - cautiously approach or evade based on distance
+                                        if (dist < 150) {
+                                            // Too close - evade
+                                            if (dist < minEvadeDist) {
+                                                minEvadeDist = dist;
+                                                evadeTarget = other;
+                                            }
+                                        } else {
+                                            // Far enough - hunt
+                                            if (dist < minHuntDist) {
+                                                minHuntDist = dist;
+                                                huntTarget = other;
+                                            }
+                                        }
+                                    }
+                                } else if (relationship === 'love' && this.tribeId === other.tribeId) {
+                                    // Same tribe, loved class - seek for mating
+                                    if (dist < minMateDist && !this.partners.includes(other)) {
+                                        minMateDist = dist;
+                                        mateTarget = other;
+                                    }
+                                }
+                            }
+                            
+                            // Execute behavior: Evade first (safety), then hunt, then mate
+                            if (evadeTarget && minEvadeDist < 300) {
+                                let awayFrom = Vector.sub(this.pos, evadeTarget.pos);
+                                if (awayFrom.mag() > 0) {
+                                    awayFrom.normalize().mult(4.0); // Very strong evasion
+                                    superAgentForce.add(awayFrom);
+                                    behaviorActive = true;
+                                    this.state = "Evading Hated Class";
+                                }
+                            } else if (huntTarget && minHuntDist < 400) {
+                                let toward = Vector.sub(huntTarget.pos, this.pos);
+                                if (toward.mag() > 0) {
+                                    toward.normalize().mult(3.5); // Strong pursuit
+                                    superAgentForce.add(toward);
+                                    behaviorActive = true;
+                                    this.state = "Hunting Hated Class";
+                                    
+                                    // COMBAT: Attack when close enough
+                                    let dist = Vector.dist(this.pos, huntTarget.pos);
+                                    if (dist < this.radius + huntTarget.radius + 10) {
+                                        // SuperAgent vs SuperAgent combat - massive damage
+                                        let myStrength = this.health + this.energy + (this.age * 0.1);
+                                        let theirStrength = huntTarget.health + huntTarget.energy + (huntTarget.age * 0.1);
+                                        let strengthRatio = myStrength / Math.max(1, theirStrength);
+                                        
+                                        // Base damage scales with strength advantage
+                                        let baseDamage = 15; // High base damage for SuperAgents
+                                        let damage = baseDamage * strengthRatio;
+                                        
+                                        huntTarget.health -= damage;
+                                        this.energy -= 2; // Small energy cost for attacking
+                                        
+                                        // Visual feedback
+                                        if (sim.particles && sim.particles.length < 200) {
+                                            sim.addCombatParticle(huntTarget.pos.x, huntTarget.pos.y, '#dc2626', 'explosion');
+                                        }
+                                        
+                                        this.state = "ATTACKING SuperAgent";
+                                    }
+                                }
+                            } else if (mateTarget && minMateDist < 300) {
+                                let toward = Vector.sub(mateTarget.pos, this.pos);
+                                if (toward.mag() > 0) {
+                                    toward.normalize().mult(1.5); // Gentle approach
+                                    superAgentForce.add(toward);
+                                    behaviorActive = true;
+                                    this.state = "Seeking Loved Class";
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 4. HUNT FOR FOOD - Seek nearby food resources
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.resources) {
+                        let nearbyFood = sim.resources.filter(r => 
+                            r.type === 'FOOD' && 
+                            r.active && 
+                            !r.carrier &&
+                            Vector.dist(this.pos, r.pos) < this.senseRad
+                        );
+                        if (nearbyFood.length > 0) {
+                            let closestFood = nearbyFood.sort((a, b) => 
+                                Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                            )[0];
+                            let toFood = this.seek(closestFood.pos).mult(2.0);
+                            superAgentForce.add(toFood);
+                            behaviorActive = true;
+                        }
+                    }
+                    
+                    // 4. SCHOOLING BEHAVIOR - Compatible SuperAgents flock together
+                    // Compatible = same tribe AND (same class OR loved class)
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents && this.superAgentClass) {
+                        let compatibleSuperAgents = sim.agents.filter(a => 
+                            !a.dead && 
+                            a !== this && 
+                            a.isSuperAgent &&
+                            a.superAgentClass &&
+                            a.tribeId === this.tribeId && // Same tribe
+                            Vector.dist(this.pos, a.pos) < this.senseRad * 1.5
+                        );
+                        
+                        // Filter for compatible classes (same class or loved class)
+                        let getRelationship = (myClass, theirClass) => {
+                            if (myClass === 'A') return theirClass === 'C' ? 'love' : (theirClass === 'A' ? 'same' : 'hate');
+                            if (myClass === 'B') return theirClass === 'A' ? 'love' : (theirClass === 'B' ? 'same' : 'hate');
+                            if (myClass === 'C') return theirClass === 'B' ? 'love' : (theirClass === 'C' ? 'same' : 'hate');
+                            return 'neutral';
+                        };
+                        
+                        let schoolmates = compatibleSuperAgents.filter(a => {
+                            let rel = getRelationship(this.superAgentClass, a.superAgentClass);
+                            return rel === 'same' || rel === 'love';
+                        });
+                        
+                        if (schoolmates.length >= 1) {
+                            // FLOCKING FORCES: Cohesion, Alignment, Separation
+                            let cohesion = new Vector(0, 0);
+                            let alignment = new Vector(0, 0);
+                            let separation = new Vector(0, 0);
+                            let separationCount = 0;
+                            
+                            // Calculate center of mass and average velocity
+                            schoolmates.forEach(other => {
+                                let dist = Vector.dist(this.pos, other.pos);
+                                
+                                // Cohesion: steer toward center of group
+                                cohesion.add(other.pos);
+                                
+                                // Alignment: match velocity with group
+                                alignment.add(other.vel);
+                                
+                                // Separation: avoid crowding (only if too close)
+                                if (dist < this.radius * 8) { // Personal space = 8 radii
+                                    let diff = Vector.sub(this.pos, other.pos);
+                                    diff.normalize().div(dist); // Weight by distance (closer = stronger)
+                                    separation.add(diff);
+                                    separationCount++;
+                                }
+                            });
+                            
+                            // Average and apply forces
+                            if (schoolmates.length > 0) {
+                                // Cohesion: seek center
+                                cohesion.div(schoolmates.length);
+                                cohesion = this.seek(cohesion).mult(2.5); // Strong pull to overcome momentum
+                                
+                                // Alignment: match average velocity
+                                alignment.div(schoolmates.length);
+                                alignment.sub(this.vel).limit(2.0); // Strong adjustment for high momentum
+                                
+                                // Separation: avoid crowding
+                                if (separationCount > 0) {
+                                    separation.div(separationCount);
+                                    separation.mult(4.0); // Very strong to prevent collisions
+                                }
+                                
+                                // Combine flocking forces
+                                superAgentForce.add(cohesion);
+                                superAgentForce.add(alignment);
+                                superAgentForce.add(separation);
+                                
+                                behaviorActive = true;
+                                this.state = `Schooling (${schoolmates.length})`;
+                            }
+                        }
+                    }
+                    
+                    // 5. HUNT FOR RESOURCES - Seek valuable resources
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.resources) {
+                        let nearbyResources = sim.resources.filter(r => 
+                            (r.type === 'TREASURE' || r.type === 'ORE' || r.type === 'MAT') && 
+                            r.active && 
+                            !r.carrier &&
+                            Vector.dist(this.pos, r.pos) < this.senseRad
+                        );
+                        if (nearbyResources.length > 0) {
+                            let closestResource = nearbyResources.sort((a, b) => 
+                                Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                            )[0];
+                            let toResource = this.seek(closestResource.pos).mult(1.5);
+                            superAgentForce.add(toResource);
+                            behaviorActive = true;
+                        }
+                    }
+                    
+                    // 5. SEEK MATES - SuperAgents can mate (rarely)
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents) {
+                        // Initialize mating cooldown if not set
+                        if (!this.superAgentMatingCooldown) this.superAgentMatingCooldown = 0;
+                        this.superAgentMatingCooldown--;
+                        
+                        // Only seek mates if cooldown is ready (rare - every ~600 frames = 10 seconds)
+                        if (this.superAgentMatingCooldown <= 0 && this.energy > 100) {
+                            let potentialMates = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.tribeId === this.tribeId && // Same tribe
+                                a.vertexAgents && a.vertexAgents.length === 3 && // Has sprouted
+                                this.vertexAgents && this.vertexAgents.length === 3 && // We have sprouted too
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 0.6
+                            );
+                            
+                            if (potentialMates.length > 0) {
+                                let mate = potentialMates[0];
+                                let dist = Vector.dist(this.pos, mate.pos);
+                                
+                                // If close enough, mate!
+                                if (dist < this.radius + mate.radius + 10) {
+                                    this.mateSuperAgent(mate, sim);
+                                    this.superAgentMatingCooldown = 600; // Long cooldown
+                                    mate.superAgentMatingCooldown = 600;
+                                    behaviorActive = true;
+                                } else {
+                                    // Seek mate
+                                    let toMate = this.seek(mate.pos).mult(1.5);
+                                    superAgentForce.add(toMate);
+                                    behaviorActive = true;
+                                    this.state = "Seeking Mate";
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 6. SEEK FRIENDS - Move toward friendly agents (same tribe)
+                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents) {
+                        let friends = sim.agents.filter(a => 
+                            !a.dead && 
+                            a !== this && 
+                            a.tribeId === this.tribeId &&
+                            Vector.dist(this.pos, a.pos) < this.senseRad
+                        );
+                        if (friends.length > 0) {
+                            let closestFriend = friends.sort((a, b) => 
+                                Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                            )[0];
+                            let toFriend = this.seek(closestFriend.pos).mult(1.0);
+                            superAgentForce.add(toFriend);
+                            behaviorActive = true;
+                        }
+                    }
+                    
+                    // 6. DEFAULT: Strong wander force to explore
+                    if (!behaviorActive) {
+                        let wanderForce = this.wander().mult(4.0); // 4x stronger wander
+                        superAgentForce.add(wanderForce);
+                    }
+                    
+                    // Store the intended direction for triangle rotation
+                    if (superAgentForce.mag() > 0.1) {
+                        this.superAgentDirection = superAgentForce.copy().normalize();
+                    }
+                    
+                    // FEATURE: SuperAgents always move forward in their current direction
+                    // They don't stop - they maintain momentum and direction
+                    if (this.vel.mag() < 0.5) {
+                        // If velocity is too low, add a forward push
+                        let forwardPush = this.superAgentDirection ? 
+                            this.superAgentDirection.copy().mult(0.5) : 
+                            Vector.random2D().mult(0.5);
+                        this.vel.add(forwardPush);
+                    }
+                    
+                    // FEATURE: SuperAgents have MUCH stronger propulsion in their direction of motion
+                    // Add continuous forward thrust in current direction (only when they have intent)
+                    if (behaviorActive && this.vel.mag() > 1.0) {
+                        let forwardThrust = this.vel.copy().normalize().mult(0.3); // Gentle continuous thrust
+                        this.vel.add(forwardThrust);
+                    }
+                    
+                    // Apply behavioral force with strong intent
+                    // SuperAgents need strong forces to overcome their heavy mass (20x normal)
+                    if (superAgentForce.mag() > 0.1) {
+                        // Scale up the force to account for SuperAgent's heavy mass
+                        // They are 20x heavier, so forces need to be proportionally stronger
+                        superAgentForce.mult(3.0); // Moderate force multiplier (was 15.0 - too jiggly)
+                    }
+                    
+                    this.applyForce(superAgentForce);
+                    
+                    // FEATURE: SuperAgents can sprout a tail of elastic-bonded agents if not bonded
+                    if (typeof sim !== 'undefined' && sim.frame && sim.agents) {
+                        // Check if we have no bonds (excluding geometric bonds which are part of structure)
+                        let hasNonGeometricBonds = false;
+                        for (let partner of this.partners) {
+                            if (this.rigidBonds[partner.id] !== 'geometric') {
+                                hasNonGeometricBonds = true;
+                                break;
+                            }
+                        }
+                        
+                        // If not bonded to anything (except geometric structure), sprout a tail
+                        if (!hasNonGeometricBonds && this.age > 300 && sim.frame % 180 === 0) {
+                            // Random chance to sprout tail (20% per check)
+                            if (Math.random() < 0.2) {
+                                // Sprout 1-3 random agents as elastic tail
+                                let tailLength = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+                                
+                                // Find nearby agents that could join the tail
+                                let nearbyAgents = sim.agents.filter(a => 
+                                    !a.dead && 
+                                    a !== this && 
+                                    !a.isSuperAgent && // Don't bond SuperAgents in tail
+                                    !a.isGroupEntity && // Don't bond group entities
+                                    a.role !== 'Guardian' && // Don't bond tethered Guardians
+                                    a.role !== 'Soldier' && // Don't bond tethered Soldiers
+                                    a.tribeId === this.tribeId && // Same tribe only
+                                    a.partners.length < 2 && // Not heavily bonded already
+                                    Vector.dist(this.pos, a.pos) < this.senseRad * 0.5
+                                );
+                                
+                                // Sort by distance and take closest ones
+                                nearbyAgents.sort((a, b) => 
+                                    Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                                );
+                                
+                                let bonded = 0;
+                                for (let i = 0; i < Math.min(tailLength, nearbyAgents.length); i++) {
+                                    let agent = nearbyAgents[i];
+                                    this.addPartner(agent, 'elastic');
+                                    bonded++;
+                                }
+                                
+                                if (bonded > 0) {
+                                    this.state = "Sprouted Tail";
+                                }
+                            }
+                        }
+                    }
+                    
+                    // FEATURE: Check for bonded SuperAgents and trigger mating to create 10 offspring
+                    if (typeof sim !== 'undefined' && sim.frame) {
+                        // Check if bonded to another SuperAgent for mating
+                        if (!this.superAgentMatingCooldown) this.superAgentMatingCooldown = 0;
+                        
+                        if (this.superAgentMatingCooldown <= 0 && this.energy > 100) {
+                            for (let partner of this.partners) {
+                                if (partner.isSuperAgent && 
+                                    partner.tribeId === this.tribeId) {
+                                    
+                                    // Check if close enough and both ready
+                                    let dist = Vector.dist(this.pos, partner.pos);
+                                    if (dist < this.radius + partner.radius + 20 && 
+                                        (!partner.superAgentMatingCooldown || partner.superAgentMatingCooldown <= 0)) {
+                                        
+                                        // Mate! Create 10 random offspring
+                                        let mateX = (this.pos.x + partner.pos.x) / 2;
+                                        let mateY = (this.pos.y + partner.pos.y) / 2;
+                                        
+                                        for (let i = 0; i < 10; i++) {
+                                            // Mix DNA from both parents
+                                            let childDNA = {};
+                                            for (let key in this.dna) {
+                                                if (Math.random() < 0.5) {
+                                                    childDNA[key] = this.dna[key];
+                                                } else {
+                                                    childDNA[key] = partner.dna[key] || this.dna[key];
+                                                }
+                                                // Add mutation
+                                                if (typeof childDNA[key] === 'number') {
+                                                    childDNA[key] += (Math.random() - 0.5) * 0.3;
+                                                    childDNA[key] = Math.max(0, Math.min(1, childDNA[key]));
+                                                }
+                                            }
+                                            
+                                            // Spawn in a circle around mating location
+                                            let angle = (Math.PI * 2 / 10) * i;
+                                            let spawnDist = 40;
+                                            let spawnX = mateX + Math.cos(angle) * spawnDist;
+                                            let spawnY = mateY + Math.sin(angle) * spawnDist;
+                                            
+                                            let child = new Agent(spawnX, spawnY, childDNA, {p1: this, p2: partner}, this.tribeId);
+                                            child.age = 50; // Start semi-mature
+                                            child.assignColor();
+                                            sim.agents.push(child);
+                                        }
+                                        
+                                        // Energy cost
+                                        this.energy -= 80;
+                                        partner.energy -= 80;
+                                        
+                                        // Visual effect
+                                        sim.particles.push(new Particle(mateX, mateY, '#ec4899', 'heart'));
+                                        sim.particles.push(new Particle(mateX, mateY, '#ec4899', 'explosion'));
+                                        
+                                        this.superAgentMatingCooldown = 900; // Long cooldown
+                                        partner.superAgentMatingCooldown = 900;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // SuperAgents no longer have vertex agent abilities
                 } else if (this.isGroupEntity) {
+                    // FEATURE: Group entities break bonds and scatter when entering nest areas
+                    if (typeof sim !== 'undefined' && sim.tribes && sim.tribes.nests) {
+                        for (let nest of sim.tribes.nests) {
+                            let distToNest = Vector.dist(this.pos, nest.pos);
+                            if (distToNest < nest.radius * 2.0) { // Within 2x nest radius
+                                // Break all bonds for this agent and all group members
+                                let group = this.getBondedGroup();
+                                for (let member of group) {
+                                    if (member.partners.length > 0) {
+                                        member.breakAllBonds();
+                                        member.isGroupEntity = false;
+                                        member.groupEntityMembers = [];
+                                        // Apply strong scatter force away from nest
+                                        let awayFromNest = Vector.sub(member.pos, nest.pos);
+                                        if (awayFromNest.mag() > 0) {
+                                            awayFromNest.normalize().mult(5.0); // Strong scatter force
+                                            member.applyForce(awayFromNest);
+                                        }
+                                    }
+                                }
+                                if (typeof sim !== 'undefined' && sim.debugPerformance) {
+                                    console.log(`💥 GROUP ENTITY SCATTERED: Near nest, all bonds broken`);
+                                }
+                                return; // Exit early, bonds are broken
+                            }
+                        }
+                    }
+                    
                     // PERFORMANCE OPTIMIZATION: Very aggressive throttling of expensive group entity operations
                     // Only do these expensive operations every 4-6 frames for group entities
                     let groupEntityCount = (typeof sim !== 'undefined' && sim.agents) ? 
@@ -6685,13 +7558,35 @@
                         this.huntNearbyGroupResources(resources);
                         this.consumeNearbyEnemiesForEnergy(agents);
                     }
+                    
+                    // FEATURE: Group entities have stronger wander force to roam away from nests
+                    let wanderForce = this.wander().mult(3.0); // 3x stronger wander
+                    this.applyForce(wanderForce);
+                }
+                
+                // FEATURE: SuperAgents have more momentum - less velocity damping
+                if (this.isSuperAgent) {
+                    // SuperAgents maintain velocity better (momentum) - reduced damping
+                    this.vel.mult(0.98); // 2% damping to reduce jiggling (was 0.995)
+                    
+                    // Ensure minimum velocity - SuperAgents never stop moving
+                    if (this.vel.mag() < 0.5) {
+                        let minVel = this.superAgentDirection ? 
+                            this.superAgentDirection.copy().mult(1.0) : 
+                            this.vel.copy().normalize().mult(1.0);
+                        this.vel.add(minVel);
+                    }
                 }
                 
                 this.vel.add(this.acc);
                 let speedLimit = this.maxSpeed * (groupBenefits.propulsionBoost || 1);
                 if (this.carrying && load > 0) speedLimit *= 0.7; 
                 if (this.frenzyTimer > 0) speedLimit *= 1.5;
-                if (this.role === 'Monster') speedLimit *= 0.8; 
+                if (this.role === 'Monster') speedLimit *= 0.8;
+                // FEATURE: Group entities roam faster and farther from nests
+                if (this.isGroupEntity) speedLimit *= 2.0;
+                // FEATURE: SuperAgents move faster with more momentum
+                if (this.isSuperAgent) speedLimit *= 2.5; // 2.5x faster than normal agents (reduced from 4x)
                 
                 this.vel.limit(speedLimit);
                 this.pos.add(this.vel);
@@ -7069,6 +7964,17 @@
                     }
                 }
                 
+                // FEATURE: Tethered agents (Guardian, Soldier) release bonds near nest - MUST BE BEFORE TETHER SECTION
+                let isTetheredRole = (this.role === 'Guardian' || this.role === 'Soldier');
+                if (isTetheredRole && this.tribeId !== -1 && myNest && this.partners.length > 0) {
+                    let nestRadius = myNest.radius || 20;
+                    // Release bonds if within 1.5x nest radius OR every 20 frames
+                    if (distToNest < nestRadius * 1.5 || (typeof sim !== 'undefined' && sim.frame % 20 === 0)) {
+                        this.breakAllBonds();
+                        this.bondCooldown = 60; // 1 second cooldown to allow escape
+                    }
+                }
+                
                 // NEST TETHER (LEADERS/GUARDIANS)
                 if (this.tribeId !== -1 && myNest) {
                     let isLeader = sim.tribes.tribes[this.tribeId].leaderId === this.id;
@@ -7099,6 +8005,14 @@
                             let k = 0.03 * pullStrength;
                             let force = Vector.sub(myNest.pos, this.pos).normalize().mult(k * 10);
                             forces.base.add(force);
+                        }
+                        
+                        // FEATURE: Leaders release bonded agents when near nest (within 1.5x radius)
+                        if (isLeader && distToNest < nestRadius * 1.5 && this.partners.length > 0) {
+                            // Leader is near nest - release all bonds
+                            this.breakAllBonds();
+                            // Set cooldown so bonded agents can escape
+                            this.bondCooldown = 60; // 1 second cooldown to allow escape
                         }
                         
                         // ============================================
@@ -7574,16 +8488,22 @@
                 
                 let elasticLeader = null;
                 if (hasElasticBonds && elasticGroup.length > 1) {
-                    // Find strongest member (highest health + energy + stability)
-                    let maxStrength = -1;
-                    for (let member of elasticGroup) {
-                        if (member.dead) continue;
-                        let strength = (member.health / member.maxHealth) * 0.4 +
-                                      (member.energy / member.maxEnergy) * 0.3 +
-                                      (member.structureStability / CONFIG.structureStabilityCap) * 0.3;
-                        if (strength > maxStrength) {
-                            maxStrength = strength;
-                            elasticLeader = member;
+                    // FEATURE: SuperAgents are ALWAYS leaders when bonded to non-SuperAgents
+                    let superAgentInGroup = elasticGroup.find(m => m.isSuperAgent && !m.dead);
+                    if (superAgentInGroup) {
+                        elasticLeader = superAgentInGroup;
+                    } else {
+                        // Find strongest member (highest health + energy + stability)
+                        let maxStrength = -1;
+                        for (let member of elasticGroup) {
+                            if (member.dead) continue;
+                            let strength = (member.health / member.maxHealth) * 0.4 +
+                                          (member.energy / member.maxEnergy) * 0.3 +
+                                          (member.structureStability / CONFIG.structureStabilityCap) * 0.3;
+                            if (strength > maxStrength) {
+                                maxStrength = strength;
+                                elasticLeader = member;
+                            }
                         }
                     }
                 }
@@ -7638,13 +8558,63 @@
                     } else {
                         if (rigidType) {
                             // Rigid bond: maintain fixed length with strong spring
+                            // FEATURE: Geometric bonds (from SuperAgents) are EXTREMELY rigid and short
                             let rigidLength = CONFIG.rigidBondLength;
+                            let stiffness = CONFIG.rigidBondStiffness;
+                            
+                            if (rigidType === 'geometric') {
+                                rigidLength = 20; // Very short (was 35)
+                                stiffness = 2.0; // Extremely rigid (was 0.43) - 4.6x stronger!
+                            }
+                            
                             let displacement = d - rigidLength;
-                            let k = CONFIG.rigidBondStiffness * partnerStrength; // Weight by strength
+                            let k = stiffness * partnerStrength; // Weight by strength
                             let force = Vector.sub(p.pos, this.pos).normalize().mult(displacement * k);
+                            
+                            // FEATURE: SuperAgents are 20x heavier - reduce bond force on them dramatically
+                            if (this.isSuperAgent && !p.isSuperAgent) {
+                                // SuperAgent is barely influenced by small agents (1/20th normal bond force)
+                                force.mult(0.05);
+                            }
+                            
                             forces.bond.add(force);
-                            // Stronger velocity coupling for rigid bonds, weighted by partner strength
-                            this.vel.add(p.vel.copy().mult(0.08 * partnerStrength));
+                            
+                            // FEATURE: SuperAgents are 20x heavier - they pull everything, nothing pulls them
+                            let velocityCoupling = 0.08 * partnerStrength;
+                            if (this.isSuperAgent && !p.isSuperAgent) {
+                                // SuperAgent is barely influenced by others (1/20th normal)
+                                velocityCoupling *= 0.05;
+                            } else if (p.isSuperAgent && !this.isSuperAgent) {
+                                // Non-SuperAgent is strongly pulled by SuperAgent (20x normal)
+                                velocityCoupling *= 20.0;
+                                
+                                // FEATURE: Agents bonded to SuperAgents MUST follow them absolutely
+                                // Break any conflicting bonds that would pull them away
+                                if (this.partners.length > 1) {
+                                    // Check if other bonds are pulling in opposite direction to SuperAgent
+                                    let toSuperAgent = Vector.sub(p.pos, this.pos).normalize();
+                                    
+                                    for (let i = this.partners.length - 1; i >= 0; i--) {
+                                        let otherPartner = this.partners[i];
+                                        if (otherPartner === p || otherPartner.dead) continue;
+                                        
+                                        // Don't break geometric bonds (those are part of SuperAgent structure)
+                                        if (this.rigidBonds[otherPartner.id] === 'geometric') continue;
+                                        
+                                        // Calculate direction to other partner
+                                        let toOther = Vector.sub(otherPartner.pos, this.pos).normalize();
+                                        
+                                        // If other partner is pulling in opposite direction (dot product < -0.3)
+                                        let dotProduct = toSuperAgent.x * toOther.x + toSuperAgent.y * toOther.y;
+                                        if (dotProduct < -0.3) {
+                                            // Break the conflicting bond
+                                            this.removePartner(otherPartner);
+                                            otherPartner.removePartner(this);
+                                        }
+                                    }
+                                }
+                            }
+                            this.vel.add(p.vel.copy().mult(velocityCoupling));
                             
                             // TYPE-SPECIFIC EMERGENT BEHAVIORS
                             if (rigidType === 'shield') {
@@ -7720,8 +8690,55 @@
                         let displacement = d - idealDist;
                             let k = 0.05 * partnerStrength; // Weight by strength
                         let force = Vector.sub(p.pos, this.pos).normalize().mult(displacement * k);
+                        
+                        // FEATURE: SuperAgents are barely influenced by elastic bonds from small agents
+                        if (this.isSuperAgent && !p.isSuperAgent) {
+                            force.mult(0.05); // 1/20th force on SuperAgent
+                        }
+                        
                         forces.bond.add(force);
-                            this.vel.add(p.vel.copy().mult(0.02 * partnerStrength)); // Weight velocity coupling
+                            
+                            // FEATURE: Leader influence on movement (Group Entities and SuperAgents)
+                            let velocityCoupling = 0.02 * partnerStrength;
+                            
+                            // SuperAgents have MUCH stronger influence - they are heavy and have momentum
+                            if (p.isSuperAgent) {
+                                // Partner is SuperAgent - follow 20x more strongly (they are heavy)
+                                velocityCoupling *= 20.0;
+                                
+                                // FEATURE: Agents bonded to SuperAgents MUST follow them absolutely
+                                // Break any conflicting elastic bonds that would pull them away
+                                if (this.partners.length > 1) {
+                                    let toSuperAgent = Vector.sub(p.pos, this.pos).normalize();
+                                    
+                                    for (let i = this.partners.length - 1; i >= 0; i--) {
+                                        let otherPartner = this.partners[i];
+                                        if (otherPartner === p || otherPartner.dead) continue;
+                                        
+                                        // Don't break geometric bonds
+                                        if (this.rigidBonds[otherPartner.id] === 'geometric') continue;
+                                        
+                                        let toOther = Vector.sub(otherPartner.pos, this.pos).normalize();
+                                        let dotProduct = toSuperAgent.x * toOther.x + toSuperAgent.y * toOther.y;
+                                        
+                                        // Break conflicting bonds (opposite direction)
+                                        if (dotProduct < -0.3) {
+                                            this.removePartner(otherPartner);
+                                            otherPartner.removePartner(this);
+                                        }
+                                    }
+                                }
+                            } else if (this.isSuperAgent) {
+                                // I am SuperAgent - others barely affect me (I have momentum)
+                                velocityCoupling *= 0.05; // Only 5% influence from followers
+                            } else if (this.isGroupEntity && p === elasticLeader) {
+                                // If partner is the leader, follow 5x more strongly
+                                velocityCoupling *= 5.0;
+                            } else if (p.isGroupEntity && this === elasticLeader) {
+                                // If I am the leader, others follow me weakly (I lead)
+                                velocityCoupling *= 0.2;
+                            }
+                            this.vel.add(p.vel.copy().mult(velocityCoupling));
                         }
                     }
                 });
@@ -7776,7 +8793,12 @@
                                     }
                                     
                                     // Apply constraint to forces - reduce opposite movement
-                                    let constraintStrength = Math.abs(dotProduct) * 0.4; // Stronger constraint for more opposite movement
+                                    // FEATURE: Group entities have much stronger leadership constraint
+                                    let baseConstraint = 0.4;
+                                    if (this.isGroupEntity || (elasticLeader && elasticLeader.isGroupEntity)) {
+                                        baseConstraint = 0.8; // 2x stronger constraint for group entities
+                                    }
+                                    let constraintStrength = Math.abs(dotProduct) * baseConstraint;
                                     for (let key in forces) {
                                         if (forces[key] && forces[key].mag) {
                                             let oppositeComponent = forces[key].copy();
@@ -8531,6 +9553,14 @@
                                 if (!this.rangedCombatCooldown) this.rangedCombatCooldown = 0;
                                 
                                 if (this.rangedCombatCooldown <= 0 && Math.random() < CONFIG.rangedCombatChance) {
+                                    // SUPERAGENT BONUS: Enhanced projectile damage and faster cooldown
+                                    let projectileDamage = CONFIG.rangedCombatDamage;
+                                    let cooldownTime = CONFIG.rangedCombatCooldown;
+                                    if (this.isSuperAgent) {
+                                        projectileDamage *= 2.0; // 2x damage
+                                        cooldownTime *= 0.5; // 2x faster shooting
+                                    }
+                                    
                                     // FIRE PROJECTILE!
                                     sim.projectiles.push(new Projectile(
                                         this.pos.x, 
@@ -8538,10 +9568,10 @@
                                         closest.pos.x, 
                                         closest.pos.y, 
                                         this, 
-                                        CONFIG.rangedCombatDamage, 
+                                        projectileDamage, 
                                         'arrow'
                                     ));
-                                    this.rangedCombatCooldown = CONFIG.rangedCombatCooldown;
+                                    this.rangedCombatCooldown = cooldownTime;
                                     this.state = "Shooting Enemy";
                                     active = true;
                                     
@@ -8559,6 +9589,16 @@
                             // Melee combat (close range)
                             if (d < this.radius + closest.radius + 5) {
                                 let damage = CONFIG.damageRate * 100; // Strong damage
+                                
+                                // SUPERAGENT VS SUPERAGENT: Moderate damage (not too high, not too low)
+                                if (this.isSuperAgent && closest.isSuperAgent) {
+                                    damage *= 1.5; // Moderate damage to other SuperAgents
+                                }
+                                // SUPERAGENT BONUS: SuperAgents with Soldier ability deal 2x damage to regular agents
+                                else if (this.isSuperAgent && this.canShootRanged) {
+                                    damage *= 2.0;
+                                }
+                                
                                 // SPY WEAKNESS: Spies weaken attack of non-tribe agents near them
                                 damage *= this.getSpyWeaknessMultiplier();
                                 // Agents inside nests are 1.5x harder to kill
@@ -9027,14 +10067,16 @@
                                             sim._cleanupAfterWar();
                                             
                                             // Establish diplomatic bonds
+                                            let oldDipBond1 = 0;
+                                            let oldDipBond2 = 0;
                                             if (sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[targetNest.tribeId]) {
                                                 if (!sim.tribes.tribes[this.tribeId].diplomaticBonds) sim.tribes.tribes[this.tribeId].diplomaticBonds = {};
                                                 if (!sim.tribes.tribes[targetNest.tribeId].diplomaticBonds) sim.tribes.tribes[targetNest.tribeId].diplomaticBonds = {};
-                                                let oldDipBond1 = sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] || 0;
-                                                let oldDipBond2 = sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] || 0;
+                                                oldDipBond1 = sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] || 0;
+                                                oldDipBond2 = sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] || 0;
                                                 
-                                                sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] = 30;
-                                                sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] = 30;
+                                            sim.tribes.tribes[this.tribeId].diplomaticBonds[targetNest.tribeId] = 30;
+                                            sim.tribes.tribes[targetNest.tribeId].diplomaticBonds[this.tribeId] = 30;
                                             }
                                             
                                             // DIPLOMATIC BOND CREATED - Nice harmonious sound
@@ -9784,13 +10826,13 @@
                                                 damage = rival.isInsideNest() ? damage / 1.5 : damage;
                                             } else {
                                                 // Full combat calculations
-                                                let myGroupBenefits = this.getGroupBenefits();
-                                                let rivalGroupBenefits = rival.getGroupBenefits();
+                                            let myGroupBenefits = this.getGroupBenefits();
+                                            let rivalGroupBenefits = rival.getGroupBenefits();
                                                 damage = CONFIG.damageRate * 100 * myGroupBenefits.damageBonus / rivalGroupBenefits.defenseBonus;
-                                                damage *= this.huntBonus;
-                                                damage *= (1 - rival.shieldBonus);
-                                                damage *= this.getSpyWeaknessMultiplier();
-                                                damage = rival.isInsideNest() ? damage / 1.5 : damage;
+                                            damage *= this.huntBonus;
+                                            damage *= (1 - rival.shieldBonus);
+                                            damage *= this.getSpyWeaknessMultiplier();
+                                            damage = rival.isInsideNest() ? damage / 1.5 : damage;
                                             }
                                             rival.health -= damage;
                                             markLeaderUnderAttack(rival, this);
@@ -9857,13 +10899,13 @@
                                 damage = other.isInsideNest() ? damage / 1.5 : damage;
                             } else {
                                 // Full combat calculations
-                                let myGroupBenefits = this.getGroupBenefits();
-                                let otherGroupBenefits = other.getGroupBenefits();
+                            let myGroupBenefits = this.getGroupBenefits();
+                            let otherGroupBenefits = other.getGroupBenefits();
                                 damage = (CONFIG.damageRate * 200) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
-                                damage *= this.huntBonus;
-                                damage *= (1 - other.shieldBonus);
-                                damage *= this.getSpyWeaknessMultiplier();
-                                damage = other.isInsideNest() ? damage / 1.5 : damage;
+                            damage *= this.huntBonus;
+                            damage *= (1 - other.shieldBonus);
+                            damage *= this.getSpyWeaknessMultiplier();
+                            damage = other.isInsideNest() ? damage / 1.5 : damage;
                             }
                             other.health -= damage; this.energy += 20;
                             markLeaderUnderAttack(other, this);
@@ -10061,14 +11103,14 @@
                                  dmg = Math.max(1, dmg - shield);
                              } else {
                                  // Full combat calculations
-                                 let myGroupBenefits = this.getGroupBenefits();
-                                 let otherGroupBenefits = other.getGroupBenefits();
-                                 let shield = other.skills.SHIELD || 0;
+                             let myGroupBenefits = this.getGroupBenefits();
+                             let otherGroupBenefits = other.getGroupBenefits();
+                             let shield = other.skills.SHIELD || 0;
                                  dmg = (CONFIG.damageRate * 100) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
-                                 dmg *= this.huntBonus;
-                                 dmg *= (1 - other.shieldBonus);
-                                 dmg *= this.getSpyWeaknessMultiplier();
-                                 dmg = Math.max(1, dmg - shield);
+                             dmg *= this.huntBonus;
+                             dmg *= (1 - other.shieldBonus);
+                             dmg *= this.getSpyWeaknessMultiplier();
+                             dmg = Math.max(1, dmg - shield); 
                              }
                              other.health -= dmg;
                              
@@ -10342,13 +11384,24 @@
                         }
                     }
                     
-                    // If too many agents nearby, reduce mating chance significantly
+                    // STAGGERED MATING: In dense areas, only allow some agents to mate per frame
+                    // This prevents compute spikes from simultaneous DNA mixing/mutations
                     if (nearbyCount > 15) {
-                        // Very dense area - 80% reduction in mating chance
-                        if (Math.random() > 0.2) return; // 80% chance to skip mating
+                        // Very dense area - stagger mating across 5 frames (20% per frame)
+                        let staggerGroup = this.id % 5;
+                        let currentGroup = sim.frame % 5;
+                        if (staggerGroup !== currentGroup) return; // Not this agent's turn
+                        
+                        // Additional 60% reduction even on allowed frames
+                        if (Math.random() > 0.4) return;
                     } else if (nearbyCount > 10) {
-                        // Dense area - 50% reduction
-                        if (Math.random() > 0.5) return;
+                        // Dense area - stagger across 3 frames (33% per frame)
+                        let staggerGroup = this.id % 3;
+                        let currentGroup = sim.frame % 3;
+                        if (staggerGroup !== currentGroup) return;
+                        
+                        // Additional 30% reduction
+                        if (Math.random() > 0.7) return;
                     }
                     
                     // Check for recent births in this area (prevent sustained explosions)
@@ -10605,6 +11658,77 @@
             addPartner(p, bondType) {
                 if (this.isNestTool || (p && p.isNestTool)) return;
                 if (!p || this.partners.includes(p)) return;
+                
+                // FEATURE: Bond cooldown - agents cannot bond during cooldown period
+                if (this.bondCooldown > 0 || (p && p.bondCooldown > 0)) {
+                    return; // Cannot bond during cooldown
+                }
+                
+                // FEATURE: Leaders cannot bond with other leaders
+                let isThisLeader = this.tribeId !== -1 && typeof sim !== 'undefined' && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id;
+                let isPartnerLeader = p.tribeId !== -1 && typeof sim !== 'undefined' && sim.tribes.tribes[p.tribeId] && sim.tribes.tribes[p.tribeId].leaderId === p.id;
+                if (isThisLeader && isPartnerLeader) {
+                    return; // Leaders cannot bond with other leaders
+                }
+                
+                // FEATURE: Leaders cannot bond with tethered agents
+                let isThisTethered = (this.role === 'Guardian' || this.role === 'Soldier');
+                let isPartnerTethered = (p.role === 'Guardian' || p.role === 'Soldier');
+                
+                if (isThisLeader && isPartnerTethered) {
+                    return; // Leaders cannot bond with tethered agents
+                }
+                if (isPartnerLeader && isThisTethered) {
+                    return; // Tethered agents cannot bond with leaders
+                }
+                
+                // FEATURE: Tethered agents cannot bond with other tethered agents
+                if (isThisTethered && isPartnerTethered) {
+                    return; // Tethered agents cannot bond with each other
+                }
+                
+                // FEATURE: Tethered agents cannot bond with tethered agents from other nests
+                if (isThisTethered && isPartnerTethered && this.tribeId !== p.tribeId) {
+                    return; // Tethered agents from different tribes cannot bond
+                }
+                
+                // FEATURE: Tethered agents cannot bond with group entities
+                if (isThisTethered && p.isGroupEntity) {
+                    return; // Tethered agents cannot bond with group entities
+                }
+                if (isPartnerTethered && this.isGroupEntity) {
+                    return; // Group entities cannot bond with tethered agents
+                }
+                
+                // FEATURE: Group entities cannot bond with other group entities
+                if (this.isGroupEntity && p.isGroupEntity) {
+                    return; // Group entities cannot bond with each other
+                }
+                
+                // FEATURE: Group entities can ONLY bond with SuperAgents
+                if (this.isGroupEntity && !p.isSuperAgent) {
+                    return; // Group entities can only bond with SuperAgents
+                }
+                if (p.isGroupEntity && !this.isSuperAgent) {
+                    return; // Group entities can only bond with SuperAgents
+                }
+                
+                // FEATURE: SuperAgents CAN bond with other SuperAgents (same tribe only, for mating)
+                if (this.isSuperAgent && p.isSuperAgent) {
+                    // Only allow bonding if same tribe
+                    if (this.tribeId !== p.tribeId) {
+                        return; // Enemy SuperAgents cannot bond
+                    }
+                    // Same tribe SuperAgents can bond (for mating)
+                }
+                
+                // SuperAgents cannot bond with tethered agents
+                if (this.isSuperAgent && isPartnerTethered) {
+                    return; // SuperAgents cannot bond with tethered agents
+                }
+                if (p.isSuperAgent && isThisTethered) {
+                    return; // Tethered agents cannot bond with SuperAgents
+                }
                 
                 // BUILDERS CANNOT BOND - They must focus only on building
                 if (this.role === 'Builder' || p.role === 'Builder') {
@@ -10990,6 +12114,12 @@
                 superAgent.isSuperAgent = true; // Mark as SuperAgent (not group entity)
                 superAgent.originalGroupSize = group.length; // Remember size for bonuses
                 
+                // FEATURE: Assign SuperAgent class (A, B, or C) with love/hate dynamics
+                // Class A: hates B, loves C
+                // Class B: hates C, loves A
+                // Class C: hates A, loves B
+                superAgent.superAgentClass = ['A', 'B', 'C'][Math.floor(Math.random() * 3)];
+                
                 // Calculate combined abilities from group synergies ONCE (not every frame)
                 let synergies = this.calculateGroupSynergiesForSuperAgent(group);
                 
@@ -11001,25 +12131,33 @@
                 superAgent.health = superAgent.maxHealth;
                 superAgent.baseSpeed = Math.max(0.25, (superAgent.baseSpeed || 1) * (synergies.propulsionBoost || 1) * 0.9);
                 superAgent.maxSpeed = superAgent.baseSpeed;
-                superAgent.senseRad = (superAgent.senseRad || 100) * (synergies.sensing || 1);
-                superAgent.maxEnergy = (superAgent.maxEnergy || 300) * (1 + group.length * 0.1);
+                
+                // FEATURE: SuperAgents are 20x heavier and have 5x stronger propulsion
+                superAgent.mass = superAgent.baseRadius * (superAgent.health / 100) * 20; // 20x heavier than normal agents
+                superAgent.maxForce = 0.3 * 5; // 5x stronger propulsion force
+                // FEATURE: SuperAgents have 3x longer visibility radius
+                superAgent.senseRad = (superAgent.senseRad || 100) * (synergies.sensing || 1) * 3.0;
+                // FEATURE: SuperAgents have 3x higher energy storage
+                superAgent.maxEnergy = (superAgent.maxEnergy || 300) * (1 + group.length * 0.1) * 3.0;
                 superAgent.energy = superAgent.maxEnergy;
                 
                 // Store combined capabilities (no need to recalculate)
                 superAgent.superAgentCapabilities = synergies.capabilities || [];
                 superAgent.superAgentMultipliers = synergies.multipliers || {};
                 
-                // Determine role based on group composition (most common role, or special combo)
-                let roles = {};
-                group.forEach(m => { roles[m.role] = (roles[m.role] || 0) + 1; });
-                let mostCommonRole = Object.keys(roles).reduce((a, b) => roles[a] > roles[b] ? a : b, 'Gatherer');
-                superAgent.role = mostCommonRole;
+                // SuperAgents have their own role type, not inherited from members
+                superAgent.role = 'SuperAgent'; // Unique role type
                 superAgent.assignColor();
                 
-                // Apply role-specific bonuses from group
+                // SuperAgents are NOT prey, predator, or grazer - they are their own entity type
+                superAgent.isPrey = false;
+                superAgent.isPredator = false;
+                superAgent.isGrazer = false;
+                
+                // Apply combined capabilities from group composition
+                let roles = {};
+                group.forEach(m => { roles[m.role] = (roles[m.role] || 0) + 1; });
                 if (roles.Soldier) superAgent.canShootRanged = true;
-                if (roles.Raider) superAgent.isPredator = true;
-                if (roles.Farmer) superAgent.isPrey = true;
                 
                 superAgent.structureStability = CONFIG.structureStabilityCap;
                 superAgent.structureBandActive = true;
@@ -11193,6 +12331,65 @@
                     sim.spawnConverterBonder(this);
                     this.lastBonderSpawnFrame = now;
                 }
+            }
+
+            mateSuperAgent(mate, sim) {
+                // FEATURE: SuperAgent mating - creates 3 offspring with mixed abilities
+                if (!this.isSuperAgent || !mate.isSuperAgent) return;
+                if (!this.vertexAgents || !mate.vertexAgents) return;
+                if (this.vertexAgents.length !== 3 || mate.vertexAgents.length !== 3) return;
+                
+                // Combine the roles from both parents (3 + 3 = 6 roles)
+                let allParentRoles = [
+                    ...this.vertexAgents.map(a => a.role),
+                    ...mate.vertexAgents.map(a => a.role)
+                ];
+                
+                // Create 3 offspring
+                for (let i = 0; i < 3; i++) {
+                    // Spawn near the mating location
+                    let angle = (Math.PI * 2 / 3) * i;
+                    let spawnDist = 30;
+                    let spawnX = this.pos.x + Math.cos(angle) * spawnDist;
+                    let spawnY = this.pos.y + Math.sin(angle) * spawnDist;
+                    
+                    // Mix DNA from both parents with 80% mutation rate
+                    let childDNA = {};
+                    let parentDNAs = [this.dna, mate.dna];
+                    
+                    // Combine DNA traits with high mutation
+                    for (let key in this.dna) {
+                        if (Math.random() < 0.8) {
+                            // 80% chance to mutate
+                            childDNA[key] = this.dna[key] + (Math.random() - 0.5) * 0.4;
+                        } else {
+                            // 20% chance to inherit from random parent
+                            let parentDNA = parentDNAs[Math.floor(Math.random() * 2)];
+                            childDNA[key] = parentDNA[key] || this.dna[key];
+                        }
+                    }
+                    
+                    // Create the child agent
+                    let child = new Agent(spawnX, spawnY, childDNA, {p1: this, p2: mate}, this.tribeId);
+                    
+                    // Assign a random role from the combined parent roles
+                    child.role = allParentRoles[Math.floor(Math.random() * allParentRoles.length)];
+                    child.age = 50; // Start semi-mature
+                    child.assignColor();
+                    
+                    sim.agents.push(child);
+                }
+                
+                // Energy cost for mating
+                this.energy -= 50;
+                mate.energy -= 50;
+                
+                // Visual effect
+                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ec4899', 'heart'));
+                sim.particles.push(new Particle(mate.pos.x, mate.pos.y, '#ec4899', 'heart'));
+                
+                // Logging removed
+                // console.log(`💕 SUPERAGENT MATING: Created 3 offspring with mixed abilities from ${allParentRoles.join(', ')}`);
             }
 
             huntNearbyGroupResources(resources) {
@@ -11394,6 +12591,10 @@
                         if (nearbyPrey.length > 0) {
                             let mate = nearbyPrey[Math.floor(Math.random() * nearbyPrey.length)];
                             
+                            // PERFORMANCE: Limit matings per frame to prevent compute spikes
+                            if (sim._matingsThisFrame >= sim._maxMatingsPerFrame) return;
+                            sim._matingsThisFrame++;
+                            
                             // Spawn offspring
                             let childX = (this.pos.x + mate.pos.x) / 2 + (Math.random() * 40 - 20);
                             let childY = (this.pos.y + mate.pos.y) / 2 + (Math.random() * 40 - 20);
@@ -11448,6 +12649,10 @@
                         
                         if (nearbyPredators.length > 0) {
                             let mate = nearbyPredators[Math.floor(Math.random() * nearbyPredators.length)];
+                            
+                            // PERFORMANCE: Limit matings per frame to prevent compute spikes
+                            if (sim._matingsThisFrame >= sim._maxMatingsPerFrame) return;
+                            sim._matingsThisFrame++;
                             
                             let childX = (this.pos.x + mate.pos.x) / 2 + (Math.random() * 40 - 20);
                             let childY = (this.pos.y + mate.pos.y) / 2 + (Math.random() * 40 - 20);
@@ -11529,6 +12734,10 @@
                     if (potentialMates.length > 0) {
                         let mate = potentialMates[Math.floor(Math.random() * potentialMates.length)];
                         
+                        // PERFORMANCE: Limit matings per frame to prevent compute spikes
+                        if (sim._matingsThisFrame >= sim._maxMatingsPerFrame) return;
+                        sim._matingsThisFrame++;
+                        
                         let childX = (this.pos.x + mate.pos.x) / 2 + (Math.random() * 40 - 20);
                         let childY = (this.pos.y + mate.pos.y) / 2 + (Math.random() * 40 - 20);
                         
@@ -11582,7 +12791,11 @@
                 return mixed;
             }
 
-            applyForce(f) { this.acc.add(f); }
+            applyForce(f) { 
+                // F = ma, so a = F/m
+                let mass = this.mass || 1;
+                this.acc.add(f.copy().div(mass)); 
+            }
             seek(target) {
                 let desired = Vector.sub(target, this.pos).normalize().mult(this.maxSpeed);
                 return Vector.sub(desired, this.vel).limit(this.maxForce);
@@ -11642,6 +12855,42 @@
                 this.structureBandActive = withinPreferredBand && groupSize > 1;
                 this.structureStabilityGroupSize = groupSize;
                 this.lastPartnerHash = hash;
+                
+                // FEATURE: Convert stable bonded groups into group entities
+                // When a group reaches 80% stability cap and has EXACTLY 5 members, it becomes a group entity
+                // RESTRICTION: Cannot form in or near nests
+                let nearNest = false;
+                if (typeof sim !== 'undefined' && sim.tribes && sim.tribes.nests) {
+                    for (let nest of sim.tribes.nests) {
+                        let distToNest = Vector.dist(this.pos, nest.pos);
+                        if (distToNest < nest.radius * 2.5) { // Within 2.5x nest radius
+                            nearNest = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!this.isGroupEntity && this.structureStability >= CONFIG.structureStabilityCap * 0.8 && groupSize === 5 && !nearNest) {
+                    this.isGroupEntity = true;
+                    this.groupEntityMembers = group.map(a => a.id);
+                    // Logging removed
+                    // if (typeof sim !== 'undefined' && sim.debugPerformance) {
+                    //     console.log(`🌟 GROUP ENTITY FORMED: Agent ${this.id} with ${groupSize} members, stability=${this.structureStability.toFixed(0)}`);
+                    // }
+                }
+                
+                // If stability drops below 50% or group size != 5, revert to normal agent
+                if (this.isGroupEntity && (this.structureStability < CONFIG.structureStabilityCap * 0.5 || groupSize !== 5)) {
+                    this.isGroupEntity = false;
+                    this.groupEntityMembers = [];
+                    // Logging removed
+                    // if (typeof sim !== 'undefined' && sim.debugPerformance) {
+                    //     console.log(`💔 GROUP ENTITY DISSOLVED: Agent ${this.id}, stability=${this.structureStability.toFixed(0)}, size=${groupSize}`);
+                    // }
+                }
+                
+                // FEATURE: Group entities must maintain exactly 5 members
+                // If size changes, the group entity status is already handled above (dissolution)
             }
             
             boundaries() {
@@ -11658,6 +12907,32 @@
                 // Draw Bond Line - different styles for rigid vs elastic bonds
                 // PERFORMANCE: Limit bond drawing for large groups to prevent lag
                 // Handle torus wrapping for bonds that cross screen edges
+                
+                // HIGH DENSITY PERFORMANCE: Skip bonds ONLY for agents in DENSE activity zones
+                let isInCombat = (this.state === "War" || this.state === "Hunting" || this.state === "Attacking Enemy" || 
+                                  this.state === "Raiding" || this.state === "Jealous Rage");
+                let isInMating = (this.state === "Mating" || this.state === "Courting" || this.state === "Loving");
+                
+                // Check if THIS agent is in a high-density zone
+                let skipBonds = false;
+                if ((isInCombat || isInMating) && sim.spatialGrid && sim.gridCols > 0) {
+                    let cellX = Math.floor(this.pos.x / sim.gridCellSize);
+                    let cellY = Math.floor(this.pos.y / sim.gridCellSize);
+                    let cellKey = `${cellX},${cellY}`;
+                    
+                    // Only skip if in a DENSE zone (15+ agents fighting/mating in same area)
+                    if (isInCombat && sim._denseCombatZones.has(cellKey)) {
+                        skipBonds = true;
+                    } else if (isInMating && sim._denseMatingZones.has(cellKey)) {
+                        skipBonds = true;
+                    }
+                }
+                
+                if (skipBonds) {
+                    ctx.restore();
+                    return; // Skip bond drawing only for agents in dense activity zones
+                }
+                
                 let maxBondsToDraw = 20; // Limit bonds drawn per agent
                 let bondsDrawn = 0;
                 
@@ -11754,7 +13029,10 @@
                     ctx.stroke();
                 }
 
-                if (this.isGroupEntity) {
+                if (this.isSuperAgent) {
+                    // SuperAgents are ALWAYS drawn as equilateral triangles (no simplification)
+                    this.drawTriangle(ctx);
+                } else if (this.isGroupEntity) {
                     // PERFORMANCE OPTIMIZATION: Always draw polygon groups, but use simplified version when population is high
                     // This prevents visual jitter from skipping frames while maintaining performance
                     let totalAgents = (typeof sim !== 'undefined' && sim.agents) ? sim.agents.length : 0;
@@ -11821,6 +13099,95 @@
                 }
 
                 ctx.restore();
+            }
+
+            drawTriangle(ctx) {
+                // Draw equilateral triangle for SuperAgents
+                let radius = this.radius;
+                
+                // FEATURE: Triangle points in direction of motion with SLOW rotation
+                // Initialize stored rotation if not set
+                if (this.triangleRotation === undefined) {
+                    this.triangleRotation = this.vel.mag() > 0.1 ? 
+                        Math.atan2(this.vel.y, this.vel.x) + Math.PI / 2 : 0;
+                }
+                
+                let rotation = this.triangleRotation;
+                
+                if (this.vel.mag() > 0.1) {
+                    // Calculate target rotation from velocity
+                    let targetRotation = Math.atan2(this.vel.y, this.vel.x) + Math.PI / 2;
+                    
+                    // Smoothly interpolate toward target rotation (very slow - 2% per frame)
+                    // Handle angle wrapping (shortest path)
+                    let diff = targetRotation - this.triangleRotation;
+                    
+                    // Normalize angle difference to [-PI, PI]
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    while (diff < -Math.PI) diff += 2 * Math.PI;
+                    
+                    // Apply slow rotation (2% of the difference per frame)
+                    this.triangleRotation += diff * 0.02;
+                    
+                    // Normalize final rotation
+                    while (this.triangleRotation > Math.PI) this.triangleRotation -= 2 * Math.PI;
+                    while (this.triangleRotation < -Math.PI) this.triangleRotation += 2 * Math.PI;
+                    
+                    rotation = this.triangleRotation;
+                }
+                
+                // Calculate three vertices of equilateral triangle (pointing toward destination)
+                let angle1 = -Math.PI / 2 + rotation; // Top vertex (pointing toward goal)
+                let angle2 = angle1 + (2 * Math.PI / 3); // Bottom right
+                let angle3 = angle2 + (2 * Math.PI / 3); // Bottom left
+                
+                let x1 = Math.cos(angle1) * radius;
+                let y1 = Math.sin(angle1) * radius;
+                let x2 = Math.cos(angle2) * radius;
+                let y2 = Math.sin(angle2) * radius;
+                let x3 = Math.cos(angle3) * radius;
+                let y3 = Math.sin(angle3) * radius;
+                
+                // Draw filled triangle
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.lineTo(x3, y3);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw outline
+                ctx.strokeStyle = `rgba(255,255,255,0.8)`;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                // FEATURE: Draw class indicator (A, B, or C) in center
+                if (this.superAgentClass) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    ctx.font = `bold ${Math.floor(radius * 0.8)}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(this.superAgentClass, 0, 0);
+                }
+                
+                // Draw inner triangle for visual depth
+                let innerRadius = radius * 0.6;
+                let ix1 = Math.cos(angle1) * innerRadius;
+                let iy1 = Math.sin(angle1) * innerRadius;
+                let ix2 = Math.cos(angle2) * innerRadius;
+                let iy2 = Math.sin(angle2) * innerRadius;
+                let ix3 = Math.cos(angle3) * innerRadius;
+                let iy3 = Math.sin(angle3) * innerRadius;
+                
+                ctx.strokeStyle = `rgba(255,255,255,0.4)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(ix1, iy1);
+                ctx.lineTo(ix2, iy2);
+                ctx.lineTo(ix3, iy3);
+                ctx.closePath();
+                ctx.stroke();
             }
 
             drawGroupPolygon(ctx) {
@@ -11915,6 +13282,9 @@
             constructor() {
                 this.canvas = document.getElementById('simCanvas');
                 this.ctx = this.canvas.getContext('2d');
+                
+                // DEBUG FLAG: Set to false to disable performance logging (prevents memory accumulation)
+                this.debugPerformance = false; // Logging disabled
                 
                 // PERFORMANCE OPTIMIZATION: Spatial grid for O(n) distance checks
                 this.spatialGrid = null;
@@ -12217,14 +13587,18 @@
                 for (let agent of this.agents) {
                     if (agent.dead) continue;
                     let idx = this._getGridIndex(agent.pos.x, agent.pos.y);
-                    this.spatialGrid.agents[idx].push(agent);
+                    if (idx !== undefined && this.spatialGrid.agents[idx]) {
+                        this.spatialGrid.agents[idx].push(agent);
+                    }
                 }
                 
                 // Populate grid with resources
                 for (let resource of this.resources) {
                     if (!resource.active) continue;
                     let idx = this._getGridIndex(resource.pos.x, resource.pos.y);
-                    this.spatialGrid.resources[idx].push(resource);
+                    if (idx !== undefined && this.spatialGrid.resources[idx]) {
+                        this.spatialGrid.resources[idx].push(resource);
+                    }
                 }
             }
             
@@ -12298,7 +13672,7 @@
                 if (this.tribes.nests.length > 0) {
                     const worldCenterX = this.width / 2;
                     const worldCenterY = this.height / 2;
-                    
+                
                     // Reposition all nests to be centered around world center
                     this.tribes.nests.forEach(n => {
                         n.pos.x += worldCenterX;
@@ -12866,29 +14240,17 @@
                     const newNest = new Nest(x, y, tribeId);
                     this.tribes.nests.push(newNest);
                     
-                    // Initialize nest with starting agents (similar to init)
-                    // PERFORMANCE: Reduced initial spawn by 50%
-                    for(let i=0; i<2; i++) { // Reduced from 3
-                        let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
-                        a.role = 'Builder'; a.assignColor(); a.age = 200;
-                        this.agents.push(a);
-                    }
-                    for(let i=0; i<2; i++) { // Reduced from 3
-                        let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
-                        a.role = 'Guardian'; a.assignColor(); a.age = 200;
-                        this.agents.push(a);
-                    }
-                    for(let i=0; i<1; i++) { // Reduced from 2
-                        let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
-                        a.role = 'Miner'; a.assignColor(); a.age = 200;
-                        this.agents.push(a);
-                    }
-                    // PERFORMANCE: Botanist spawn reduced by 50% (now 0-1 instead of 2)
-                    if(Math.random() < 0.5) { // 50% chance to spawn 1 Botanist
-                        let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
-                        a.role = 'Botanist'; a.assignColor(); a.age = 200;
-                        this.agents.push(a);
-                    }
+                    // NEWBORN NEST: Spawn minimal agents initially, rely on newbornBoost for gradual growth
+                    // Start with just 1 of each essential role
+                    let a1 = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
+                    a1.role = 'Builder'; a1.assignColor(); a1.age = 200;
+                    this.agents.push(a1);
+                    
+                    let a2 = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
+                    a2.role = 'Guardian'; a2.assignColor(); a2.age = 200;
+                    this.agents.push(a2);
+                    
+                    // Nest will spawn more agents gradually over 900 frames via newbornBoost (3x spawn rate)
                     
                     // NEST BIRTH SOUND
                     if (typeof sfx !== 'undefined' && sfx.enabled) {
@@ -13331,11 +14693,72 @@
                 this._combatParticlesThisFrame = 0;
                 this._loveParticlesThisFrame = 0;
                 
-                // PERFORMANCE: Calculate max particles allowed based on population
+                // Detect HIGH DENSITY activity zones (not just total active agents)
                 let totalAgents = this.agents.length;
-                this._maxCombatParticlesPerFrame = totalAgents > 120 ? 5 : (totalAgents > 80 ? 10 : 20);
-                this._maxLoveParticlesPerFrame = totalAgents > 120 ? 3 : (totalAgents > 80 ? 8 : 15);
-                this._skipParticlesDuringCombat = totalAgents > 150; // Skip entirely if very high pop
+                
+                // Find dense clusters of combat/mating using spatial grid
+                let denseCombatZones = new Set(); // Store grid cells with high combat density
+                let denseMatingZones = new Set(); // Store grid cells with high mating density
+                
+                if (this.spatialGrid && this.gridCols > 0) {
+                    // Count activity per grid cell
+                    let combatPerCell = {};
+                    let matingPerCell = {};
+                    
+                    for (let a of this.agents) {
+                        if (a.dead) continue; // Skip dead agents
+                        
+                        let cellX = Math.floor(a.pos.x / this.gridCellSize);
+                        let cellY = Math.floor(a.pos.y / this.gridCellSize);
+                        let cellKey = `${cellX},${cellY}`;
+                        
+                        // Combat states
+                        if (a.state === "War" || a.state === "Hunting" || a.state === "Attacking Enemy" || 
+                            a.state === "Raiding" || a.state === "Jealous Rage") {
+                            combatPerCell[cellKey] = (combatPerCell[cellKey] || 0) + 1;
+                        } 
+                        // Mating states - ONLY count agents actively mating (not just bonded/tethered)
+                        // Exclude tethered agents who are just idle in nests
+                        else if ((a.state === "Mating" || a.state === "Courting" || a.state === "Loving") && 
+                                 !a.isTethered) {
+                            matingPerCell[cellKey] = (matingPerCell[cellKey] || 0) + 1;
+                        }
+                    }
+                    
+                    // Mark cells with HIGH DENSITY activity (15+ agents in same area)
+                    for (let cellKey in combatPerCell) {
+                        if (combatPerCell[cellKey] >= 15) {
+                            denseCombatZones.add(cellKey);
+                        }
+                    }
+                    for (let cellKey in matingPerCell) {
+                        if (matingPerCell[cellKey] >= 15) {
+                            denseMatingZones.add(cellKey);
+                        }
+                    }
+                }
+                
+                // Store for use by agents
+                this._denseCombatZones = denseCombatZones;
+                this._denseMatingZones = denseMatingZones;
+                
+                // Particle limits based on number of DENSE zones
+                let denseZoneCount = denseCombatZones.size + denseMatingZones.size;
+                this._maxCombatParticlesPerFrame = denseZoneCount > 3 ? 3 : (denseZoneCount > 2 ? 5 : (denseZoneCount > 1 ? 10 : 20));
+                this._maxLoveParticlesPerFrame = denseZoneCount > 3 ? 2 : (denseZoneCount > 2 ? 5 : (denseZoneCount > 1 ? 8 : 15));
+                this._skipParticlesDuringCombat = denseZoneCount > 4; // Skip if many dense zones
+                
+                // Debug logging for dense zones (only when detected)
+                if (this.debugPerformance && denseZoneCount > 0 && this.frame % 60 === 0) {
+                    console.log(`⚡ DENSE ZONES: ${denseCombatZones.size} combat, ${denseMatingZones.size} mating | Agents: ${totalAgents}`);
+                }
+                
+                // Note: Full frame skipping happens at 50ms (see below in rendering section)
+                // Don't add additional frame skipping here as it causes visual inconsistency
+                
+                // MATING PERFORMANCE: Track mating events this frame to prevent compute spikes
+                this._matingsThisFrame = 0;
+                this._maxMatingsPerFrame = 10; // Limit to 10 births per frame max
                 
                 // PERFORMANCE: Quick particle cap check during battles (every frame to prevent lag)
                 if (this.particles.length > 150 && this.agents.length > 80) {
@@ -13378,12 +14801,12 @@
                     // Non-food resources - resSpawnRate can be > 1.0 for guaranteed spawn
                     let resSpawnChance = CONFIG.resSpawnRate;
                     if (resSpawnChance >= 1.0) {
-                        this.spawnResource(null, null, null);
+                    this.spawnResource(null, null, null);
                         resSpawnChance -= 1.0;
                     }
                     if (Math.random() < resSpawnChance) {
                         this.spawnResource(null, null, null);
-                    }
+                }
                 }
                 
                 // Food spawn near nests (reduced rate and shorter lifespan)
@@ -13920,19 +15343,48 @@
                     });
                 }
                 
+                // POPULATION CONTROL: Aggressive throttling when approaching cap
+                if (totalAgents >= CONFIG.popCap) {
+                    // Hard cap reached - prevent ALL reproduction
+                    // Mark oldest/weakest agents for removal
+                    let overage = totalAgents - CONFIG.popCap;
+                    if (overage > 0) {
+                        // Sort by age (oldest first) and health (weakest first)
+                        let sortedAgents = this.agents
+                            .filter(a => !a.dead)
+                            .sort((a, b) => {
+                                // Prioritize removing old, weak agents
+                                let scoreA = a.age * 0.5 + (100 - a.health) * 0.5;
+                                let scoreB = b.age * 0.5 + (100 - b.health) * 0.5;
+                                return scoreB - scoreA; // Higher score = more likely to remove
+                            });
+                        // Remove excess agents
+                        for (let i = 0; i < Math.min(overage + 5, sortedAgents.length); i++) {
+                            sortedAgents[i].dead = true;
+                        }
+                    }
+                } else if (totalAgents > CONFIG.popCap * 0.9) {
+                    // Approaching cap (90%+) - drastically reduce reproduction
+                    // Reduce birth rate multiplier to slow growth
+                    this.dynamicBirthRateMult = Math.min(this.dynamicBirthRateMult, 0.3);
+                } else if (totalAgents > CONFIG.popCap * 0.8) {
+                    // Getting close (80%+) - moderately reduce reproduction
+                    this.dynamicBirthRateMult = Math.min(this.dynamicBirthRateMult, 0.6);
+                }
+                
                 // PERFORMANCE OPTIMIZATION: Update spatial grid much less frequently when population is high
                 // This reduces expensive grid rebuilds that cause jitter
                 // Reuse totalAgents from staggered updates section above
-                let gridUpdateInterval = 2; // Default: every 2 frames
-                if (totalAgents > 120) {
-                    gridUpdateInterval = 8; // Every 8 frames when population is high - much less frequent
-                } else if (totalAgents > 100) {
-                    gridUpdateInterval = 6; // Every 6 frames
-                } else if (totalAgents > 100) {
-                    gridUpdateInterval = 4; // Every 4 frames when population is moderate
-                }
-                if (this.frame % gridUpdateInterval === 0) {
-                    this._updateSpatialGrid();
+                    let gridUpdateInterval = 2; // Default: every 2 frames
+                    if (totalAgents > 120) {
+                        gridUpdateInterval = 8; // Every 8 frames when population is high - much less frequent
+                    } else if (totalAgents > 100) {
+                        gridUpdateInterval = 6; // Every 6 frames
+                    } else if (totalAgents > 100) {
+                        gridUpdateInterval = 4; // Every 4 frames when population is moderate
+                    }
+                    if (this.frame % gridUpdateInterval === 0) {
+                            this._updateSpatialGrid();
                 }
                 
                 // PERFORMANCE OPTIMIZATION: Update particles less frequently when population is high
@@ -14053,6 +15505,23 @@
                 
                 // Track nest count before filtering to detect nest deaths
                 let nestsBefore = this.tribes.nests.length;
+                
+                // Clean up war bonds for dead nests BEFORE removing them
+                let deadNests = this.tribes.nests.filter(n => n.hp <= 0);
+                deadNests.forEach(deadNest => {
+                    let deadTribeId = deadNest.tribeId;
+                    // Remove all war bonds involving this dead tribe
+                    for (let tid in this.tribes.tribes) {
+                        let tribe = this.tribes.tribes[tid];
+                        if (tribe && tribe.atWarWith && tribe.atWarWith[deadTribeId] !== undefined) {
+                            delete tribe.atWarWith[deadTribeId];
+                        }
+                    }
+                    // Also clean up the dead tribe's war bonds
+                    if (this.tribes.tribes[deadTribeId] && this.tribes.tribes[deadTribeId].atWarWith) {
+                        this.tribes.tribes[deadTribeId].atWarWith = {};
+                    }
+                });
                 
                 // Remove dead nests (HP <= 0)
                 this.tribes.nests = this.tribes.nests.filter(n => n.hp > 0);
@@ -15163,14 +16632,14 @@
                 for (let a of deadAgents) {
                     if (processedDead++ > 20) break; // Limit processing to prevent lag
                     
-                    let drops = Math.floor(a.radius / 5);
-                    if(a.role === 'Monster') drops = 30; 
+                        let drops = Math.floor(a.radius / 5);
+                        if(a.role === 'Monster') drops = 30; 
                     // Limit drops to prevent resource explosion
                     drops = Math.min(drops, 10);
-                    for(let i=0; i<drops; i++) {
+                        for(let i=0; i<drops; i++) {
                         let r = new Resource(a.pos.x + (Math.random()*40-20), a.pos.y + (Math.random()*40-20), 'FOOD', false, a.tribeId);
-                        this.resources.push(r);
-                    }
+                            this.resources.push(r);
+                        }
                     // Skulls - use throttled particle creation
                     if (this._particlesCreatedThisFrame < this._maxParticlesPerFrame) {
                         sim.particles.push(new Particle(a.pos.x, a.pos.y, '#fff', 'skull'));
@@ -15189,8 +16658,8 @@
                         if (!r.active) return false;
                         // Remove blocks that have decayed (life <= 0)
                         if (r.type === 'BLOCK' && r.life !== undefined && r.life <= 0) return false;
-                        return true;
-                    });
+                    return true;
+                });
                 }
                 let resourcesAfterFilter = this.resources.length;
                 
@@ -15426,12 +16895,12 @@
                         // DRAW NESTS - Must be drawn inside world tiling loop so they appear in all world copies
                         // This prevents nests from vanishing during panning when zoomed in
                         this.tribes.nests.forEach(n => {
-                            n.draw(this.ctx);
+                                n.draw(this.ctx);
                         });
                         
                         // DRAW DIPLOMATIC, COMMERCIAL, AND WAR BONDS BETWEEN NESTS
                         // PERFORMANCE: Use pre-computed active bonds list instead of O(N²) nested loop
-                        const ctx = this.ctx;
+                const ctx = this.ctx;
                         
                         // Viewport bounds for culling (with margin for bonds that extend beyond viewport)
                         const viewMargin = Math.max(viewWidth, viewHeight) * 0.2; // 20% margin
@@ -15462,13 +16931,13 @@
                                     let normalizedDir = bondLength > 0 ? new Vector(torusDir.x / bondLength, torusDir.y / bondLength) : new Vector(0, 0);
                                     
                                     // Draw the war bond line (thick, angry red)
-                                    ctx.beginPath();
-                                    ctx.moveTo(n1.pos.x, n1.pos.y);
+                                 ctx.beginPath();
+                                 ctx.moveTo(n1.pos.x, n1.pos.y);
                                     ctx.lineTo(n1.pos.x + torusDir.x, n1.pos.y + torusDir.y);
                                     ctx.strokeStyle = 'rgba(220, 38, 38, 0.9)'; // Angry red
                                     ctx.lineWidth = 5;
                                     ctx.setLineDash([8, 4]); // Dashed for visual effect
-                                    ctx.stroke();
+                                 ctx.stroke();
                                     ctx.setLineDash([]); // Reset
                                     
                                     // Animated particles moving both ways along the bond
@@ -15659,8 +17128,8 @@
                                         ctx.textAlign = 'center';
                                         ctx.fillText(Math.floor(comBond), midX, midY + 10);
                                     }
-                            }
-                        }
+                                }
+                             }
 
                         // DRAW SPAWN POINT CIRCLES - Large colored circles at nest centers (tribe color)
                         // Drawn AFTER bonds so they appear on top (z-order: top)
@@ -15876,31 +17345,15 @@
                     this.updateStaggerSize = Math.max(targetStaggerForCount, this.updateStaggerSize - 1);
                 }
                 
-                // CRITICAL: Skip frame entirely if frame time is extremely high (prevent jitter)
-                if (this.avgFrameTime > 50) { // > 50ms = < 20fps - skip update entirely
-                    // Still need to draw (with camera offset and wrapping) even if skipping update
-                    this.ctx.fillStyle = '#111827';
-                    this.ctx.fillRect(0, 0, this.width, this.height);
-                    // Draw wrapped world (minimal - just background)
-                    for (let dx = -1; dx <= 1; dx++) {
-                        for (let dy = -1; dy <= 1; dy++) {
-                            this.ctx.save();
-                            this.ctx.translate(this.cameraX + dx * this.width, this.cameraY + dy * this.height);
-                            // Minimal drawing here if needed
-                            this.ctx.restore();
-                        }
-                    }
-
-                this.updateUI();
-                this.frame++;
-                    requestAnimationFrame(() => this.loop());
-                    return; // Skip this frame's update
+                // PERFORMANCE: If frame time is extremely high, reduce quality but STILL DRAW
+                // Don't skip frame entirely as it causes blackouts - just reduce detail
+                let skipExpensiveUpdates = this.avgFrameTime > 50; // > 50ms = < 20fps
+                
+                if (this.debugPerformance && skipExpensiveUpdates && this.frame % 60 === 0) {
+                    console.log(`⚠️ HIGH FRAME TIME: ${this.avgFrameTime.toFixed(1)}ms - reducing quality`);
                 }
-
-                    this.updateUI();
-                    this.frame++;
-                    
-                    // PERFORMANCE: Periodic cleanup every 300 frames (5 seconds at 60fps)
+                
+                // PERFORMANCE: Periodic cleanup every 300 frames (5 seconds at 60fps)
                     if (this.frame % 300 === 0) {
                         // Aggressive cleanup after intense periods
                         // PERFORMANCE: Quick count check without expensive filtering
@@ -15930,6 +17383,10 @@
                             this.plagues = this.plagues.filter(p => p.life > 0).slice(-15);
                         }
                     }
+                
+                // Update UI and increment frame counter
+                this.updateUI();
+                this.frame++;
                 
                 requestAnimationFrame(() => this.loop());
             }
