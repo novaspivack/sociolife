@@ -26,7 +26,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111827; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        canvas { display: block; cursor: crosshair; }
+        canvas { display: block; cursor: crosshair; width: 100vw; height: 100vh; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         #zoom-control { position: fixed; right: 20px; top: 50%; transform: translateY(-50%); z-index: 100; pointer-events: auto; background: rgba(0, 0, 0, 0.7); padding: 15px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.2); }
         #zoom-control label { display: block; color: white; font-size: 11px; text-align: center; margin-bottom: 8px; font-weight: bold; }
@@ -70,7 +70,7 @@
     <!-- Zoom Control -->
     <div id="zoom-control">
         <label>ZOOM</label>
-        <input type="range" id="zoom-slider" min="0.5" max="1.5" step="0.05" value="1.0" orient="vertical">
+        <input type="range" id="zoom-slider" min="1.0" max="2.0" step="0.05" value="1.0" orient="vertical">
         <span id="zoom-value">100%</span>
     </div>
 
@@ -1096,8 +1096,8 @@
             mutationRate: 0.35,
             learningRate: 0.1,
             resSpawnRate: 1.08, // Increased by 20% (was 0.9)
-            foodSpawnRate: 1.0, // Guaranteed spawn per frame + chance for extra (was 0.48)
-            foodSpawnNearNestsRate: 0.5, // Much higher (was 0.22) - spawn near nests more often
+            foodSpawnRate: 0.8, // PERFORMANCE: Reduced by 20% (was 1.0)
+            foodSpawnNearNestsRate: 0.4, // PERFORMANCE: Reduced by 20% (was 0.5)
             foodNutritionalValue: 1.6,
             maxRes: 400, // Doubled (was 200) - allow more resources on map
             mateCost: 20,
@@ -2777,14 +2777,14 @@
                         spawnRate *= techSpawnBonus;
                     }
                     
-                    // Check for POST-WAR BABY BOOM - 10x spawning of all agent types
+                    // Check for POST-WAR BABY BOOM - 5x spawning of all agent types (reduced by 50% for performance)
                     let isInBabyBoom = this.babyBoom > 0;
                     
                     if (isInBabyBoom) {
                         // BABY BOOM - Massive spawning of ALL agent types
                         // Wealth factor is more generous - full rate at lower wealth threshold
                         let wealthFactor = Math.min(1.0, this.wealth / 200); // Full rate at 200+ wealth
-                        let festivalSpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * 10.0; // 10x normal rate
+                        let festivalSpawnRate = (CONFIG.nestAgentSpawnRate || 0.02) * 5.0; // 5x normal rate (reduced from 10x)
                         
                         // Only spawn if nest has enough wealth to support new agents
                         // Lower threshold - winners can spawn even with less wealth (baby boom is strong!)
@@ -2801,12 +2801,12 @@
                                 // Spawn multiple agents during baby boom (celebration!)
                                 // More generous wealth limits - baby boom should be strong!
                                 let maxAffordableAgents = Math.floor(this.wealth / 30); // REDUCED: 30 wealth per agent (was 50)
-                                let numToSpawn = Math.min(3 + Math.floor(Math.random() * 5), maxAffordableAgents, 5); // INCREASED: 3-5 agents (was 2-3), limited by wealth
+                                let numToSpawn = Math.min(2 + Math.floor(Math.random() * 2), maxAffordableAgents, 3); // PERFORMANCE: 2-3 agents (reduced from 3-5), limited by wealth
                                 let spawnedCount = 0;
                                 
                                 // Lower wealth threshold - allow spawning with less wealth during baby boom
                                 // Use weighted random selection respecting spawn rates and caps
-                                for (let i = 0; i < numToSpawn && spawnedCount < 5 && this.wealth >= 20; i++) { // INCREASED: 5 max (was 3), 20 wealth minimum (was 30)
+                                for (let i = 0; i < numToSpawn && spawnedCount < 3 && this.wealth >= 20; i++) { // PERFORMANCE: 3 max (reduced from 5), 20 wealth minimum
                                     let role = weightedRandomRole(allAvailableRoles, currentCounts, roleCaps, spawnRates, { targetPerRole: 5 });
                                     if (!role) break; // No more roles available
                                     
@@ -2940,9 +2940,9 @@
                         }
                     }
                     
-                    // WAR-TIME FIGHTING ROLE SPAWNING - 10x spawn rate for fighting roles during war (skip during baby boom)
+                    // WAR-TIME FIGHTING ROLE SPAWNING - 5x spawn rate for fighting roles during war (reduced by 50% for performance)
                     if (isAtWar && !isInBabyBoom) {
-                        let fightingRoleSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * 10.0; // 10x normal rate
+                        let fightingRoleSpawnRate = (CONFIG.nestAgentSpawnRate || 0.003) * 5.0; // 5x normal rate (reduced from 10x)
                         let fightingRoles = ['Soldier', 'Raider', 'Guardian'];
                         
                         // Check tech tier for fighting roles using centralized function
@@ -3139,11 +3139,11 @@
                                 agentCount = cached.count;
                             }
                         }
-                        let baseGeneration = 4 + (agentCount * 0.5); // INCREASED: 4 base (was 2) + 0.5 per agent (was 0.3)
+                        let baseGeneration = 2 + (agentCount * 0.25); // PERFORMANCE: Reduced by 50% (was 4 + 0.5)
                         this.wealth += baseGeneration;
                         
                         // Spawn resources frequently during baby boom (victory spoils continue to flow in)
-                        if (Math.random() < 0.35) { // INCREASED: 35% chance per check (was 25%)
+                        if (Math.random() < 0.175) { // PERFORMANCE: Reduced by 50% (was 0.35)
                             let resourceTypes = ['FOOD', 'MAT', 'ORE', 'TREASURE'];
                             let resourceType = resourceTypes[Math.floor(Math.random() * resourceTypes.length)];
                             sim.spawnResource(null, 
@@ -3561,8 +3561,8 @@
                             
                             memberIndex += thisNestMembers;
                             
-                            // START BABY BOOM - 10x spawning for 750 frames (reduced from 1500 for graphics stability)
-                            winnerNest.babyBoom = 750;
+                            // START BABY BOOM - 10x spawning for 375 frames (reduced by 50% for performance)
+                            winnerNest.babyBoom = 375;
                             
                             // IMMEDIATE HP RESTORATION - War winners need full health to survive post-war
                             // Restore HP to 85% of max (gives buffer but not instant full recovery)
@@ -3652,7 +3652,7 @@
                             }
                         });
                         
-                        console.log(`Nest of tribe ${this.tribeId} destroyed! ${losingTribeMembers.length} citizens converted to ${warringNests.length} winning tribes. Post-war reconstruction: doubled wealth + spoils + 750-frame baby boom!`);
+                        console.log(`Nest of tribe ${this.tribeId} destroyed! ${losingTribeMembers.length} citizens converted to ${warringNests.length} winning tribes. Post-war reconstruction: doubled wealth + spoils + 375-frame baby boom!`);
                     } else {
                         // NO WAR WINNERS - SCATTER ALL VALUE WIDELY AROUND NEST IN RANDOM FORMS
                         // Scatter wealth, energy, resources, and structural treasure as random resources
@@ -4215,7 +4215,7 @@
                         if (sim.particles.length < 200) {
                             // Only create blood particle if particle count is reasonable
                             if (sim.particles.length < 200) {
-                                sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'blood'));
+                                sim.addCombatParticle(agent.pos.x, agent.pos.y, '#dc2626', 'blood');
                             }
                         }
                     }
@@ -4344,10 +4344,14 @@
                 const bases = ['Red', 'Blue', 'Green', 'Gold', 'Void'];
                 const suffixes = ['Claw', 'Fin', 'Leaf', 'Spear', 'Walkers'];
                 
+                // FIX: Create nests at world center (0,0) initially, will be repositioned in init()
                 for(let i=0; i<count; i++) {
                     let tid = this.createTribe(bases[i%bases.length] + ' ' + suffixes[i%suffixes.length], colors[i%colors.length]);
-                    let preferredX = 100 + Math.random() * (window.innerWidth - 200);
-                    let preferredY = 100 + Math.random() * (window.innerHeight - 200);
+                    // Start at origin, spread in a circle
+                    let angle = (i / count) * Math.PI * 2;
+                    let radius = 200;
+                    let preferredX = Math.cos(angle) * radius;
+                    let preferredY = Math.sin(angle) * radius;
                     let pos = this.findValidNestPosition(preferredX, preferredY);
                     let newNest = new Nest(pos.x, pos.y, tid);
                     this.nests.push(newNest);
@@ -5189,7 +5193,7 @@
                         if (sim.particles.length < 200) {
                             // Only create blood particle if particle count is reasonable
                             if (sim.particles.length < 200) {
-                            sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#dc2626', 'blood'));
+                            sim.addCombatParticle(agent.pos.x, agent.pos.y, '#dc2626', 'blood');
                             }
                         }
                             // TEMPORARILY DISABLED FOR TESTING
@@ -7264,7 +7268,7 @@
                                             let damage = 2.0; // Leader does good damage
                                             agent.health -= damage;
                                             agent.energy -= damage * 0.5;
-                                            sim.particles.push(new Particle(agent.pos.x, agent.pos.y, '#ef4444', 'spark'));
+                                            sim.addCombatParticle(agent.pos.x, agent.pos.y, '#ef4444', 'spark');
                                             if (!active) { this.state = "Attacking Enemy"; active = true; }
                                             break;
                     } else {
@@ -7284,7 +7288,7 @@
                                     let damage = 3.0; // Extra damage to enemy leaders
                                     enemyLeader.health -= damage;
                                     enemyLeader.energy -= damage * 0.5;
-                                    sim.particles.push(new Particle(enemyLeader.pos.x, enemyLeader.pos.y, '#dc2626', 'spark'));
+                                    sim.addCombatParticle(enemyLeader.pos.x, enemyLeader.pos.y, '#dc2626', 'spark');
                                     if (!active) { this.state = "Attacking Enemy Leader"; active = true; }
                                 } else {
                                     // Seek enemy leader
@@ -7893,7 +7897,7 @@
                                     let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
                                     sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
                                 }
-                            sim.particles.push(new Particle(nearest.pos.x, nearest.pos.y, '#ef4444', 'spark'));
+                            sim.addCombatParticle(nearest.pos.x, nearest.pos.y, '#ef4444', 'spark');
                             }
                         }
                     } else {
@@ -8154,7 +8158,7 @@
                                         sim.tribes.updateOpinion(this.tribeId, enemyTarget.tribeId, -0.5);
                                     }
                                     
-                                    sim.particles.push(new Particle(enemyTarget.pos.x, enemyTarget.pos.y, '#dc2626', 'spark'));
+                                    sim.addCombatParticle(enemyTarget.pos.x, enemyTarget.pos.y, '#dc2626', 'spark');
                                 }
                             }
                         }
@@ -8233,7 +8237,7 @@
                                 let damage = baseDamage * (1.0 - defenseReduction);
                                 target.hp -= damage;
                                 sim.tribes.tribes[target.tribeId].underAttack = true; // TRIGGER DEFENSE
-                                sim.particles.push(new Particle(target.pos.x, target.pos.y, '#ef4444', 'spark'));
+                                sim.addCombatParticle(target.pos.x, target.pos.y, '#ef4444', 'spark');
                                 
                                 // ATTACKING DETERIORATES RELATIONS!
                                 if (Math.random() < 0.3) { // 30% chance per attack
@@ -8405,7 +8409,7 @@
                             if (sim.particles.length < 200) {
                                 // Only create blood particle if particle count is reasonable
                                 if (sim.particles.length < 200) {
-                            sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                            sim.addCombatParticle(closest.pos.x, closest.pos.y, '#dc2626', 'blood');
                                 }
                             }
                             // Sound handled by throttled system in update() - no direct call here
@@ -8565,7 +8569,7 @@
                             if (sim.particles.length < 200) {
                                 // Only create blood particle if particle count is reasonable
                                 if (sim.particles.length < 200) {
-                                sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                                sim.addCombatParticle(closest.pos.x, closest.pos.y, '#dc2626', 'blood');
                                 }
                             }
                                 // Sound handled by throttled system in update() - no direct call here
@@ -8797,7 +8801,7 @@
                             if (sim.particles.length < 200) {
                                 // Only create blood particle if particle count is reasonable
                                 if (sim.particles.length < 200) {
-                                sim.particles.push(new Particle(closest.pos.x, closest.pos.y, '#dc2626', 'blood'));
+                                sim.addCombatParticle(closest.pos.x, closest.pos.y, '#dc2626', 'blood');
                                 }
                             }
                                 // Sound handled by throttled system in update() - no direct call here
@@ -9739,7 +9743,7 @@
                         active = true;
                         // Self-limiting: Only create particle if particle count is reasonable
                         if (Math.random() < 0.1 && sim.particles && sim.particles.length < 150) {
-                            sim.particles.push(new Particle(other.pos.x, other.pos.y, '#f472b6', 'heart'));
+                            sim.addLoveParticle(other.pos.x, other.pos.y, '#f472b6', 'heart');
                         }
                     }
 
@@ -9770,19 +9774,27 @@
                                         
                                         // Attack the rival directly
                                     if (Vector.dist(this.pos, rival.pos) < this.radius + rival.radius + 5) {
-                                            let myGroupBenefits = this.getGroupBenefits();
-                                            let rivalGroupBenefits = rival.getGroupBenefits();
-                                            let damage = CONFIG.damageRate * 100 * myGroupBenefits.damageBonus / rivalGroupBenefits.defenseBonus;
-                                            // Apply hunt bonus and shield bonus
-                                            damage *= this.huntBonus;
-                                            damage *= (1 - rival.shieldBonus);
-                                            // SPY WEAKNESS: Spies weaken attack of non-tribe agents near them
-                                            damage *= this.getSpyWeaknessMultiplier();
-                                            // Agents inside nests are 1.5x harder to kill
-                                            damage = rival.isInsideNest() ? damage / 1.5 : damage;
+                                            // PERFORMANCE: Simplify combat at high population
+                                            let damage;
+                                            if (sim.agents.length > 150) {
+                                                // Simplified combat - skip expensive group benefit calculations
+                                                damage = CONFIG.damageRate * 100;
+                                                damage *= this.huntBonus;
+                                                damage *= (1 - rival.shieldBonus);
+                                                damage = rival.isInsideNest() ? damage / 1.5 : damage;
+                                            } else {
+                                                // Full combat calculations
+                                                let myGroupBenefits = this.getGroupBenefits();
+                                                let rivalGroupBenefits = rival.getGroupBenefits();
+                                                damage = CONFIG.damageRate * 100 * myGroupBenefits.damageBonus / rivalGroupBenefits.defenseBonus;
+                                                damage *= this.huntBonus;
+                                                damage *= (1 - rival.shieldBonus);
+                                                damage *= this.getSpyWeaknessMultiplier();
+                                                damage = rival.isInsideNest() ? damage / 1.5 : damage;
+                                            }
                                             rival.health -= damage;
                                             markLeaderUnderAttack(rival, this);
-                                        sim.particles.push(new Particle(rival.pos.x, rival.pos.y, '#ef4444', 'spark'));
+                                        sim.addCombatParticle(rival.pos.x, rival.pos.y, '#ef4444', 'spark');
                                             sfx.play('jealousy', 350, 0.15);
                                         }
                                         
@@ -9801,7 +9813,7 @@
                                                         damage = child.isInsideNest() ? damage / 1.5 : damage;
                                                         child.health -= damage;
                                                     markLeaderUnderAttack(child, this);
-                                                        sim.particles.push(new Particle(child.pos.x, child.pos.y, '#dc2626', 'spark'));
+                                                        sim.addCombatParticle(child.pos.x, child.pos.y, '#dc2626', 'spark');
                                                         // Sound handled by throttled system in update() - no direct call here
                                                     }
                                                 }
@@ -9835,16 +9847,24 @@
                         forces.hunt.add(this.seek(other.pos).mult(2.0));
                         this.state = "Hunting"; active = true;
                         if (d < this.radius + other.radius + 5) {
-                            let myGroupBenefits = this.getGroupBenefits();
-                            let otherGroupBenefits = other.getGroupBenefits();
-                            let damage = (CONFIG.damageRate * 200) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
-                            // Apply hunt bonus and shield bonus
-                            damage *= this.huntBonus;
-                            damage *= (1 - other.shieldBonus);
-                            // SPY WEAKNESS: Spies weaken attack of non-tribe agents near them
-                            damage *= this.getSpyWeaknessMultiplier();
-                            // Agents inside nests are 1.5x harder to kill
-                            damage = other.isInsideNest() ? damage / 1.5 : damage;
+                            // PERFORMANCE: Simplify combat at high population
+                            let damage;
+                            if (sim.agents.length > 150) {
+                                // Simplified combat
+                                damage = CONFIG.damageRate * 200;
+                                damage *= this.huntBonus;
+                                damage *= (1 - other.shieldBonus);
+                                damage = other.isInsideNest() ? damage / 1.5 : damage;
+                            } else {
+                                // Full combat calculations
+                                let myGroupBenefits = this.getGroupBenefits();
+                                let otherGroupBenefits = other.getGroupBenefits();
+                                damage = (CONFIG.damageRate * 200) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
+                                damage *= this.huntBonus;
+                                damage *= (1 - other.shieldBonus);
+                                damage *= this.getSpyWeaknessMultiplier();
+                                damage = other.isInsideNest() ? damage / 1.5 : damage;
+                            }
                             other.health -= damage; this.energy += 20;
                             markLeaderUnderAttack(other, this);
                             if(this.energy > this.maxEnergy) this.energy = this.maxEnergy;
@@ -9863,7 +9883,7 @@
                                     let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
                                     sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
                                 }
-                            sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ef4444', 'spark'));
+                            sim.addCombatParticle(other.pos.x, other.pos.y, '#ef4444', 'spark');
                             }
                             
                             // BATTLE SOUND - Track combat state and play every 10 frames during combat
@@ -10030,16 +10050,26 @@
                          active = true; this.state = "War";
                          this.targetId = other.id;
                          if (d < this.radius + other.radius + 5) {
-                             let myGroupBenefits = this.getGroupBenefits();
-                             let otherGroupBenefits = other.getGroupBenefits();
-                             let shield = other.skills.SHIELD || 0;
-                             let dmg = (CONFIG.damageRate * 100) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
-                             // Apply hunt bonus and shield bonus
-                             dmg *= this.huntBonus;
-                             dmg *= (1 - other.shieldBonus);
-                             // SPY WEAKNESS: Spies weaken attack of non-tribe agents near them
-                             dmg *= this.getSpyWeaknessMultiplier();
-                             dmg = Math.max(1, dmg - shield); 
+                             // PERFORMANCE: Simplify combat at high population
+                             let dmg;
+                             if (sim.agents.length > 150) {
+                                 // Simplified combat
+                                 let shield = other.skills.SHIELD || 0;
+                                 dmg = CONFIG.damageRate * 100;
+                                 dmg *= this.huntBonus;
+                                 dmg *= (1 - other.shieldBonus);
+                                 dmg = Math.max(1, dmg - shield);
+                             } else {
+                                 // Full combat calculations
+                                 let myGroupBenefits = this.getGroupBenefits();
+                                 let otherGroupBenefits = other.getGroupBenefits();
+                                 let shield = other.skills.SHIELD || 0;
+                                 dmg = (CONFIG.damageRate * 100) * myGroupBenefits.damageBonus / otherGroupBenefits.defenseBonus;
+                                 dmg *= this.huntBonus;
+                                 dmg *= (1 - other.shieldBonus);
+                                 dmg *= this.getSpyWeaknessMultiplier();
+                                 dmg = Math.max(1, dmg - shield);
+                             }
                              other.health -= dmg;
                              
                              // BLOODY PARTICLE SCATTER EFFECTS - Reduced for performance during intense battles
@@ -10056,7 +10086,7 @@
                                      let bloodColor = bloodColors[Math.floor(Math.random() * bloodColors.length)];
                                      sim.particles.push(new Particle(particleX, particleY, bloodColor, 'spark'));
                                  }
-                             sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ef4444', 'spark'));
+                             sim.addCombatParticle(other.pos.x, other.pos.y, '#ef4444', 'spark');
                              }
                              
                              // BATTLE SOUND - Track combat state and play every 10 frames during combat
@@ -10550,8 +10580,8 @@
                                 // VFX - Heart particles (self-limiting to prevent particle explosion)
                                 // Only create particles if particle count is reasonable to prevent drawing issues
                                 if (typeof sim !== 'undefined' && sim.particles && sim.particles.length < 150) {
-                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#ec4899', 'heart')); 
-                                    sim.particles.push(new Particle(other.pos.x, other.pos.y, '#ec4899', 'heart')); 
+                                sim.addLoveParticle(this.pos.x, this.pos.y, '#ec4899', 'heart'); 
+                                    sim.addLoveParticle(other.pos.x, other.pos.y, '#ec4899', 'heart'); 
                                     
                                     // Additional romantic sparkles (only if particles are low)
                                     if (sim.particles.length < 100) {
@@ -10560,7 +10590,7 @@
                                             let dist = 10 + Math.random() * 10;
                                             let sparkleX = (this.pos.x + other.pos.x) / 2 + Math.cos(angle) * dist;
                                             let sparkleY = (this.pos.y + other.pos.y) / 2 + Math.sin(angle) * dist;
-                                            sim.particles.push(new Particle(sparkleX, sparkleY, '#f472b6', 'star')); // Pink sparkles
+                                            sim.addLoveParticle(sparkleX, sparkleY, '#f472b6', 'star'); // Pink sparkles
                                         }
                                     }
                                 }
@@ -11007,7 +11037,7 @@
                 
                 sim.agents.push(superAgent);
                 superAgent.createInitialResources();
-                sim.particles.push(new Particle(center.x, center.y, '#f472b6', 'star'));
+                sim.addLoveParticle(center.x, center.y, '#f472b6', 'star');
                 
                 // GROUP AGENT FORMATION SOUND - Soft, gentle "ting" sound (pleasant, varies by group size)
                 if (typeof sfx !== 'undefined' && sfx.enabled) {
@@ -12025,6 +12055,8 @@
                 if (zoomSlider && zoomValue) {
                     zoomSlider.addEventListener('input', (e) => {
                         let zoom = parseFloat(e.target.value);
+                        // Constrain zoom to valid range (1.0 = fit world to viewport, 2.0 = max zoom in)
+                        zoom = Math.max(1.0, Math.min(2.0, zoom));
                         // Snap to 100% (1.0) when close (within 0.05)
                         if (Math.abs(zoom - 1.0) < 0.05) {
                             zoom = 1.0;
@@ -12233,6 +12265,22 @@
                 return { agents: nearbyAgents, resources: nearbyResources };
             }
 
+            // PERFORMANCE: Throttled particle creation for combat
+            addCombatParticle(x, y, color, type) {
+                if (this._skipParticlesDuringCombat) return; // Skip entirely at very high pop
+                if (this._combatParticlesThisFrame >= this._maxCombatParticlesPerFrame) return;
+                this.particles.push(new Particle(x, y, color, type));
+                this._combatParticlesThisFrame++;
+            }
+
+            // PERFORMANCE: Throttled particle creation for love/mating
+            addLoveParticle(x, y, color, type) {
+                if (this._skipParticlesDuringCombat) return; // Skip entirely at very high pop
+                if (this._loveParticlesThisFrame >= this._maxLoveParticlesPerFrame) return;
+                this.particles.push(new Particle(x, y, color, type));
+                this._loveParticlesThisFrame++;
+            }
+
             init() {
                 this.agents = [];
                 this.resources = [];
@@ -12246,16 +12294,20 @@
                 // Initialize spatial grid
                 this._rebuildSpatialGrid(); 
                 
-                // Center camera on initial nests (if any exist)
+                // FIX: Reposition nests to world center now that sim.width/height are available
                 if (this.tribes.nests.length > 0) {
-                    // Calculate center of all nests
-                    let sumX = 0, sumY = 0;
+                    const worldCenterX = this.width / 2;
+                    const worldCenterY = this.height / 2;
+                    
+                    // Reposition all nests to be centered around world center
                     this.tribes.nests.forEach(n => {
-                        sumX += n.pos.x;
-                        sumY += n.pos.y;
+                        n.pos.x += worldCenterX;
+                        n.pos.y += worldCenterY;
                     });
-                    this.cameraX = sumX / this.tribes.nests.length;
-                    this.cameraY = sumY / this.tribes.nests.length;
+                    
+                    // Center camera at world center
+                    this.cameraX = worldCenterX;
+                    this.cameraY = worldCenterY;
                 }
                 
                 // Initialize Nests with starting crews (MORE DIVERSE!)
@@ -12686,6 +12738,13 @@
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
                 
+                // FIX: Scale from display coordinates to canvas coordinates
+                // Canvas is 2x window size but displayed at window size via CSS
+                const scaleX = this.canvas.width / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                const canvasX = screenX * scaleX;
+                const canvasY = screenY * scaleY;
+                
                 // REFACTORED: Use canvas transform matrix to get accurate inverse transform
                 // Create a temporary canvas context with the same transforms as render
                 const tempCanvas = document.createElement('canvas');
@@ -12724,8 +12783,8 @@
                         if (!inverse.is2D || isNaN(inverse.a)) {
                             throw new Error('Inversion failed');
                         }
-                        // Apply inverse transform using DOMMatrix
-                        const point = new DOMPoint(screenX, screenY);
+                        // Apply inverse transform using DOMMatrix (use canvas coordinates)
+                        const point = new DOMPoint(canvasX, canvasY);
                         const transformed = point.matrixTransform(inverse);
                         x = transformed.x;
                         y = transformed.y;
@@ -12734,8 +12793,8 @@
                         const a = transform.a, b = transform.b, c = transform.c, d = transform.d, tx = transform.e, ty = transform.f;
                         const det = a * d - b * c;
                         if (Math.abs(det) < 0.0001) {
-                            x = (screenX - viewportCenterX) / this.zoom + viewportCenterX - this.cameraX;
-                            y = (screenY - viewportCenterY) / this.zoom + viewportCenterY - this.cameraY;
+                            x = (canvasX - viewportCenterX) / this.zoom + viewportCenterX - this.cameraX;
+                            y = (canvasY - viewportCenterY) / this.zoom + viewportCenterY - this.cameraY;
                         } else {
                             const aInv = d / det;
                             const bInv = -b / det;
@@ -12743,8 +12802,8 @@
                             const dInv = a / det;
                             const txInv = (c * ty - d * tx) / det;
                             const tyInv = (b * tx - a * ty) / det;
-                            x = aInv * screenX + cInv * screenY + txInv;
-                            y = bInv * screenX + dInv * screenY + tyInv;
+                            x = aInv * canvasX + cInv * canvasY + txInv;
+                            y = bInv * canvasX + dInv * canvasY + tyInv;
                         }
                     }
                 } else {
@@ -12754,8 +12813,8 @@
                     
                     if (Math.abs(det) < 0.0001) {
                         // Degenerate transform, fallback to simple calculation
-                        x = (screenX - viewportCenterX) / this.zoom + viewportCenterX - this.cameraX;
-                        y = (screenY - viewportCenterY) / this.zoom + viewportCenterY - this.cameraY;
+                        x = (canvasX - viewportCenterX) / this.zoom + viewportCenterX - this.cameraX;
+                        y = (canvasY - viewportCenterY) / this.zoom + viewportCenterY - this.cameraY;
                     } else {
                         // Invert the 2D affine transform matrix
                         const aInv = d / det;
@@ -12765,15 +12824,35 @@
                         const txInv = (c * ty - d * tx) / det;
                         const tyInv = (b * tx - a * ty) / det;
                         
-                        // Apply inverse transform
-                        x = aInv * screenX + cInv * screenY + txInv;
-                        y = bInv * screenX + dInv * screenY + tyInv;
+                        // Apply inverse transform (use canvas coordinates)
+                        x = aInv * canvasX + cInv * canvasY + txInv;
+                        y = bInv * canvasX + dInv * canvasY + tyInv;
                     }
                 }
+                
+                // COMPREHENSIVE LOGGING
+                console.log('🖱️ CLICK EVENT:', {
+                    screen: { x: screenX.toFixed(2), y: screenY.toFixed(2) },
+                    canvas: { x: canvasX.toFixed(2), y: canvasY.toFixed(2) },
+                    world: { x: x.toFixed(2), y: y.toFixed(2) },
+                    camera: { x: this.cameraX.toFixed(2), y: this.cameraY.toFixed(2) },
+                    viewport: { 
+                        centerX: viewportCenterX.toFixed(2), 
+                        centerY: viewportCenterY.toFixed(2)
+                    },
+                    display: { width: rect.width.toFixed(2), height: rect.height.toFixed(2) },
+                    canvas_size: { width: this.canvas.width, height: this.canvas.height },
+                    world_size: { width: this.width, height: this.height },
+                    scale: { x: scaleX.toFixed(3), y: scaleY.toFixed(3) },
+                    zoom: this.zoom.toFixed(3),
+                    tool: this.actionMode || 'none'
+                });
+                
                 const m = new Vector(x, y);
 
                 // NEST TOOL
                 if (this.actionMode === 'nest') {
+                    console.log('🏠 PLACING NEST at world coords:', { x: x.toFixed(2), y: y.toFixed(2) });
                     // Create a new tribe
                     const colors = ['#ef4444', '#3b82f6', '#10b981', '#eab308', '#d946ef', '#f97316', '#06b6d4', '#8b5cf6'];
                     const bases = ['Red', 'Blue', 'Green', 'Gold', 'Void', 'Orange', 'Cyan', 'Purple'];
@@ -12788,22 +12867,24 @@
                     this.tribes.nests.push(newNest);
                     
                     // Initialize nest with starting agents (similar to init)
-                    for(let i=0; i<3; i++) {
+                    // PERFORMANCE: Reduced initial spawn by 50%
+                    for(let i=0; i<2; i++) { // Reduced from 3
                         let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
                         a.role = 'Builder'; a.assignColor(); a.age = 200;
                         this.agents.push(a);
                     }
-                    for(let i=0; i<3; i++) {
+                    for(let i=0; i<2; i++) { // Reduced from 3
                         let a = new Agent(x + (Math.random()*20-10), y + (Math.random()*20-10), null, null, tribeId);
                         a.role = 'Guardian'; a.assignColor(); a.age = 200;
                         this.agents.push(a);
                     }
-                    for(let i=0; i<2; i++) {
+                    for(let i=0; i<1; i++) { // Reduced from 2
                         let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
                         a.role = 'Miner'; a.assignColor(); a.age = 200;
                         this.agents.push(a);
                     }
-                    for(let i=0; i<2; i++) {
+                    // PERFORMANCE: Botanist spawn reduced by 50% (now 0-1 instead of 2)
+                    if(Math.random() < 0.5) { // 50% chance to spawn 1 Botanist
                         let a = new Agent(x + (Math.random()*30-15), y + (Math.random()*30-15), null, null, tribeId);
                         a.role = 'Botanist'; a.assignColor(); a.age = 200;
                         this.agents.push(a);
@@ -13245,8 +13326,16 @@
             loop() {
                 if (!this.running) return;
                 
-                // PERFORMANCE: Reset particle creation counter each frame
+                // PERFORMANCE: Reset particle creation counters each frame
                 this._particlesCreatedThisFrame = 0;
+                this._combatParticlesThisFrame = 0;
+                this._loveParticlesThisFrame = 0;
+                
+                // PERFORMANCE: Calculate max particles allowed based on population
+                let totalAgents = this.agents.length;
+                this._maxCombatParticlesPerFrame = totalAgents > 120 ? 5 : (totalAgents > 80 ? 10 : 20);
+                this._maxLoveParticlesPerFrame = totalAgents > 120 ? 3 : (totalAgents > 80 ? 8 : 15);
+                this._skipParticlesDuringCombat = totalAgents > 150; // Skip entirely if very high pop
                 
                 // PERFORMANCE: Quick particle cap check during battles (every frame to prevent lag)
                 if (this.particles.length > 150 && this.agents.length > 80) {
@@ -13318,7 +13407,7 @@
                         let resourceMfgLevel = tribe.techTree.resource_manufacturing.level;
                         if (resourceMfgLevel > 0) {
                             // Spawn rate increases with tech level
-                            let spawnChance = resourceMfgLevel * 0.05; // 5% chance per level
+                            let spawnChance = resourceMfgLevel * 0.04; // PERFORMANCE: Reduced by 20% (was 0.05)
                             
                             if (Math.random() < spawnChance) {
                                 // Spawn raw materials (MAT, ORE) near nest
@@ -13802,21 +13891,24 @@
                 // CRITICAL FIX: Update ALL agents every frame to prevent jitter from staggered updates
                 // Staggered updates cause agents to move at different rates, creating visual jitter
                 // Instead, update all agents every frame but skip expensive operations for some
-                let totalAgents = this.agents.length;
+                // Note: totalAgents already declared at top of loop for particle throttling
                 let groupEntityCount = this.agents.filter(a => a.isGroupEntity).length;
                 let useLightweightUpdates = totalAgents > 120 || groupEntityCount > 15;
                 
                 if (useLightweightUpdates) {
                     // Update all agents every frame, but stagger expensive operations
                     let expensiveOpStagger = totalAgents > 150 ? 4 : 3; // Skip expensive ops for some agents
+                    // PERFORMANCE: Reduce mating checks even more at high population
+                    let matingStagger = totalAgents > 150 ? 8 : (totalAgents > 120 ? 6 : 4);
                     for (let i = 0; i < this.agents.length; i++) {
                         let agent = this.agents[i];
                         // Always do basic position/movement updates
                         let doExpensiveOps = (i % expensiveOpStagger) === (this.frame % expensiveOpStagger);
                         // Pass flag to skip expensive operations
                         agent.update(this.resources, this.agents, doExpensiveOps);
-                        // Mating check less frequently
-                        if (doExpensiveOps && sim.agents.length < CONFIG.popCap) {
+                        // PERFORMANCE: Mating check much less frequently at high population
+                        let doMatingCheck = (i % matingStagger) === (this.frame % matingStagger);
+                        if (doMatingCheck && doExpensiveOps && sim.agents.length < CONFIG.popCap) {
                             agent.checkMating(this.agents);
                         }
                     }
@@ -14524,7 +14616,7 @@
                                         this.particles.push(new Particle(winnerNest.pos.x, winnerNest.pos.y, '#10b981', 'explosion')); // Green for victory
                                     });
                                     
-                                    console.log(`Nest of tribe ${nest.tribeId} destroyed! ${losingTribeMembers.length} citizens converted to ${warringNests.length} winning tribes. Post-war reconstruction: doubled wealth + spoils + 750-frame baby boom!`);
+                                    console.log(`Nest of tribe ${nest.tribeId} destroyed! ${losingTribeMembers.length} citizens converted to ${warringNests.length} winning tribes. Post-war reconstruction: doubled wealth + spoils + 375-frame baby boom!`);
                                 } else {
                                     // NO WAR WINNERS - SCATTER ALL VALUE WIDELY AROUND NEST IN RANDOM FORMS
                                     // Scatter wealth, energy, resources, and structural treasure as random resources
@@ -15263,10 +15355,58 @@
                 // Calculate which world copies we need to draw to fill the entire visible area
                 // Use larger margin (50%) to ensure we cover all visible area, especially at high zoom levels
                 const margin = Math.max(viewWidth, viewHeight) * 0.5; // 50% margin for safety during panning at zoom
-                const minWorldX = Math.floor((viewLeft - margin) / this.width);
-                const maxWorldX = Math.ceil((viewRight + margin) / this.width);
-                const minWorldY = Math.floor((viewTop - margin) / this.height);
-                const maxWorldY = Math.ceil((viewBottom + margin) / this.height);
+                let minWorldX = Math.floor((viewLeft - margin) / this.width);
+                let maxWorldX = Math.ceil((viewRight + margin) / this.width);
+                let minWorldY = Math.floor((viewTop - margin) / this.height);
+                let maxWorldY = Math.ceil((viewBottom + margin) / this.height);
+                
+                // FIX: When zoomed out enough to see entire world, only draw one copy
+                if (viewWidth >= this.width && viewHeight >= this.height) {
+                    minWorldX = 0;
+                    maxWorldX = 0;
+                    minWorldY = 0;
+                    maxWorldY = 0;
+                }
+                
+                // LOGGING: First frame info
+                if (this.frame === 0) {
+                    console.log('📊 FIRST FRAME - Viewport and World Info:', {
+                        viewport: {
+                            centerX: viewportCenterX.toFixed(2),
+                            centerY: viewportCenterY.toFixed(2),
+                            viewLeft: viewLeft.toFixed(2),
+                            viewRight: viewRight.toFixed(2),
+                            viewTop: viewTop.toFixed(2),
+                            viewBottom: viewBottom.toFixed(2)
+                        },
+                        camera: {
+                            x: this.cameraX.toFixed(2),
+                            y: this.cameraY.toFixed(2),
+                            zoom: this.zoom
+                        },
+                        world: {
+                            width: this.width,
+                            height: this.height,
+                            centerX: (this.width / 2).toFixed(2),
+                            centerY: (this.height / 2).toFixed(2)
+                        },
+                        canvas: {
+                            width: this.canvas.width,
+                            height: this.canvas.height
+                        },
+                        worldCopies: {
+                            minX: minWorldX,
+                            maxX: maxWorldX,
+                            minY: minWorldY,
+                            maxY: maxWorldY
+                        },
+                        nests: this.tribes.nests.map((n, i) => ({
+                            id: i,
+                            x: n.pos.x.toFixed(2),
+                            y: n.pos.y.toFixed(2)
+                        }))
+                    });
+                }
                 
                 // Save context state (clip disabled for now)
                 this.ctx.save();
