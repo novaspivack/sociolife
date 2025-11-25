@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -297,23 +296,23 @@
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
                         <span>Res Spawn Rate</span>
-                        <span id="val-resSpawnRate" class="text-blue-400 font-mono">0.8</span>
+                        <span id="val-resSpawnRate" class="text-blue-400 font-mono">1.08</span>
                     </div>
-                    <input type="range" min="0" max="1" step="0.05" oninput="sim.updateConfig('resSpawnRate', this.value)" id="in-resSpawnRate">
+                    <input type="range" min="0" max="2" step="0.05" oninput="sim.updateConfig('resSpawnRate', this.value)" id="in-resSpawnRate" value="1.08">
                 </div>
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
                         <span>Food Spawn Rate</span>
-                        <span id="val-foodSpawnRate" class="text-green-400 font-mono">0.6</span>
+                        <span id="val-foodSpawnRate" class="text-green-400 font-mono">0.8</span>
                     </div>
-                    <input type="range" min="0" max="1" step="0.05" oninput="sim.updateConfig('foodSpawnRate', this.value)" id="in-foodSpawnRate">
+                    <input type="range" min="0" max="2" step="0.05" oninput="sim.updateConfig('foodSpawnRate', this.value)" id="in-foodSpawnRate" value="0.8">
                 </div>
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
                         <span>Food Spawn Near Nests</span>
-                        <span id="val-foodSpawnNearNestsRate" class="text-green-400 font-mono">0.1</span>
+                        <span id="val-foodSpawnNearNestsRate" class="text-green-400 font-mono">0.4</span>
                     </div>
-                    <input type="range" min="0" max="1" step="0.05" oninput="sim.updateConfig('foodSpawnNearNestsRate', this.value)" id="in-foodSpawnNearNestsRate">
+                    <input type="range" min="0" max="1" step="0.05" oninput="sim.updateConfig('foodSpawnNearNestsRate', this.value)" id="in-foodSpawnNearNestsRate" value="0.4">
                 </div>
                 <div>
                     <div class="flex justify-between text-xs text-gray-400 mb-1">
@@ -453,6 +452,77 @@
                         <span id="val-monsterLifespan" class="text-purple-500 font-mono">2500</span>
                     </div>
                     <input type="range" min="500" max="10000" step="100" oninput="sim.updateConfig('monsterLifespan', this.value)" id="in-monsterLifespan">
+                </div>
+
+                <div class="border-t border-gray-700 my-2"></div>
+
+                <!-- Lifespan & Age Controls -->
+                <div class="text-[11px] font-bold text-gray-500 uppercase mt-3 mb-2">Lifespan & Age</div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Base Lifespan</span>
+                        <span id="val-lifespanBase" class="text-cyan-400 font-mono">3000</span>
+                    </div>
+                    <input type="range" min="500" max="10000" step="100" oninput="sim.updateConfig('lifespanBase', this.value)" id="in-lifespanBase">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Adult Age</span>
+                        <span id="val-adultAge" class="text-cyan-400 font-mono">90</span>
+                    </div>
+                    <input type="range" min="10" max="300" step="10" oninput="sim.updateConfig('adultAge', this.value)" id="in-adultAge">
+                </div>
+
+                <div class="border-t border-gray-700 my-2"></div>
+
+                <!-- Resource Limits -->
+                <div class="text-[11px] font-bold text-gray-500 uppercase mt-3 mb-2">Resource Limits</div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Max Resources on Map</span>
+                        <span id="val-maxRes" class="text-blue-400 font-mono">400</span>
+                    </div>
+                    <input type="range" min="50" max="1000" step="50" oninput="sim.updateConfig('maxRes', this.value)" id="in-maxRes">
+                </div>
+
+                <div class="border-t border-gray-700 my-2"></div>
+
+                <!-- Structure Stability Controls -->
+                <div class="text-[11px] font-bold text-gray-500 uppercase mt-3 mb-2">Structure Stability</div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Stability Cap</span>
+                        <span id="val-structureStabilityCap" class="text-purple-400 font-mono">600</span>
+                    </div>
+                    <input type="range" min="100" max="2000" step="50" oninput="sim.updateConfig('structureStabilityCap', this.value)" id="in-structureStabilityCap">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Inside Gain (Bonded)</span>
+                        <span id="val-structureStabilityInsideGain" class="text-green-400 font-mono">3</span>
+                    </div>
+                    <input type="range" min="0" max="10" step="0.5" oninput="sim.updateConfig('structureStabilityInsideGain', this.value)" id="in-structureStabilityInsideGain">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Outside Gain (Near Bonded)</span>
+                        <span id="val-structureStabilityOutsideGain" class="text-green-400 font-mono">1</span>
+                    </div>
+                    <input type="range" min="0" max="5" step="0.5" oninput="sim.updateConfig('structureStabilityOutsideGain', this.value)" id="in-structureStabilityOutsideGain">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Inside Decay (Bonded)</span>
+                        <span id="val-structureStabilityInsideDecay" class="text-red-400 font-mono">1</span>
+                    </div>
+                    <input type="range" min="0" max="5" step="0.5" oninput="sim.updateConfig('structureStabilityInsideDecay', this.value)" id="in-structureStabilityInsideDecay">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Outside Decay (Not Bonded)</span>
+                        <span id="val-structureStabilityOutsideDecay" class="text-red-400 font-mono">4</span>
+                    </div>
+                    <input type="range" min="0" max="10" step="0.5" oninput="sim.updateConfig('structureStabilityOutsideDecay', this.value)" id="in-structureStabilityOutsideDecay">
                 </div>
                 
                 <div class="text-[11px] font-bold text-gray-500 uppercase mt-3 mb-2 border-t border-gray-700 pt-2">Group Benefits</div>
@@ -1027,14 +1097,43 @@
     <script>
         /* --- MATH UTILS --- */
         class Vector {
-            constructor(x, y) { this.x = x; this.y = y; }
-            add(v) { this.x += v.x; this.y += v.y; return this; }
-            sub(v) { this.x -= v.x; this.y -= v.y; return this; }
-            mult(n) { this.x *= n; this.y *= n; return this; }
-            div(n) { this.x /= n; this.y /= n; return this; }
+            constructor(x, y) { 
+                this.x = x; 
+                this.y = y; 
+            }
+            add(v) { 
+                this.x += v.x; 
+                this.y += v.y; 
+                return this; 
+            }
+            sub(v) { 
+                this.x -= v.x; 
+                this.y -= v.y; 
+                return this; 
+            }
+            mult(n) { 
+                this.x *= n; 
+                this.y *= n; 
+                return this; 
+            }
+            div(n) { 
+                this.x /= n; 
+                this.y /= n; 
+                return this; 
+            }
             mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
-            normalize() { let m = this.mag(); if (m !== 0) this.div(m); return this; }
-            limit(max) { if (this.mag() > max) { this.normalize(); this.mult(max); } return this; }
+            normalize() { 
+                let m = this.mag(); 
+                if (m !== 0) this.div(m); 
+                return this; 
+            }
+            limit(max) { 
+                if (this.mag() > max) { 
+                    this.normalize(); 
+                    this.mult(max); 
+                } 
+                return this; 
+            }
             heading() { return Math.atan2(this.y, this.x); }
             rotate(angle) {
                 let cos = Math.cos(angle);
@@ -5556,8 +5655,16 @@
                 if (parents) {
                     this.radius *= 0.6;
                     this.maxSpeed *= 0.8;
-                    if (parents.p1) { this.addPartner(parents.p1); this.kin.push(parents.p1.id); parents.p1.kin.push(this.id); }
-                    if (parents.p2) { this.addPartner(parents.p2); this.kin.push(parents.p2.id); parents.p2.kin.push(this.id); }
+                    if (parents.p1) { 
+                        this.addPartner(parents.p1); 
+                        this.kin.push(parents.p1.id); 
+                        parents.p1.kin.push(this.id); 
+                    }
+                    if (parents.p2) { 
+                        this.addPartner(parents.p2); 
+                        this.kin.push(parents.p2.id); 
+                        parents.p2.kin.push(this.id); 
+                    }
                 }
                 
                 // SOFT MUSICAL TONE WHEN AGENT IS BORN
@@ -5576,8 +5683,9 @@
             determineRole(parents) {
                 if (this.dna.monster) {
                     this.role = 'Monster';
-                    this.color = '#581c87'; 
-                    this.radius = 25;
+                    this.color = '#f97316'; // Orange (was purple)
+                    this.radius = 125; // 5x bigger diameter (was 25, 250 was too big)
+                    this.baseRadius = 125; // Store base radius for calculations
                     this.maxEnergy = 2000;
                     this.energy = 2000;
                     this.health = 500;
@@ -6587,8 +6695,14 @@
                 let isVIP = (this.role === 'Guardian' || (this.tribeId !== -1 && sim.tribes.tribes[this.tribeId] && sim.tribes.tribes[this.tribeId].leaderId === this.id));
                 
                 if (isVIP && myNest && myNest.wealth > 0) {
-                    if (this.energy < 50) { this.energy += 50; myNest.wealth = Math.max(0, myNest.wealth - 1); }
-                    if (this.health < 50) { this.health += 50; myNest.wealth = Math.max(0, myNest.wealth - 1); }
+                    if (this.energy < 50) { 
+                        this.energy += 50; 
+                        myNest.wealth = Math.max(0, myNest.wealth - 1); 
+                    }
+                    if (this.health < 50) { 
+                        this.health += 50; 
+                        myNest.wealth = Math.max(0, myNest.wealth - 1); 
+                    }
                     this.lifespan = this.maxLifespan; // Reset age timer
                 }
 
@@ -6840,8 +6954,15 @@
                             }
                         }
                     }
+                } else if (this.isGroupEntity) {
+                    // FEATURE: Group entities consume energy 3x slower (33% of normal cost)
+                    cost *= 0.33;
+                    this.maxLifespan = Math.max(this.maxLifespan, this.baseMaxLifespan * CONFIG.groupAgentLifespanMult * 1.5);
                 }
-                if (this.frenzyTimer > 0) { cost *= 2; this.frenzyTimer--; }
+                if (this.frenzyTimer > 0) {
+                    cost *= 2;
+                    this.frenzyTimer--;
+                }
                 // Garbage Collectors are very energy efficient
                 if (this.role === 'Garbage Collector') cost *= 0.3; // 70% reduction
                 // LEADERS: Do not consume energy or resources of tribe
@@ -6882,17 +7003,21 @@
                 if (this.energy <= 0 || this.health <= 0) {
                     // Check if this is a nest leader before marking as dead
                     let wasLeader = false;
+                    let myNest = null;
                     if (this.tribeId !== -1 && typeof sim !== 'undefined' && sim.tribes) {
                         wasLeader = sim.tribes.tribes[this.tribeId].leaderId === this.id;
                         
                         // If nest leader is killed, nest loses 30% of wealth immediately
                         if (wasLeader) {
-                            let myNest = sim.tribes.nests.find(n => n.tribeId === this.tribeId);
+                            myNest = sim.tribes.nests.find(n => n.tribeId === this.tribeId);
                             if (myNest) {
                                 let wealthLoss = myNest.wealth * 0.3;
                                 myNest.wealth = Math.max(0, myNest.wealth - wealthLoss);
                                 sim.setStatusMessage(`⚔️ Leader of Tribe ${this.tribeId} killed! Nest lost ${Math.floor(wealthLoss)} wealth (30%)`, 300);
                                 sim.particles.push(new Particle(myNest.pos.x, myNest.pos.y, '#dc2626', 'spark'));
+                                
+                                // FEATURE: Immediately replace the nest leader
+                                sim.replaceNestLeader(this.tribeId, myNest);
                             }
                         }
                     }
@@ -6968,15 +7093,29 @@
                     }
                     
                     // 2. DETECT BEING HUNTED & EVADE - Check if enemy SuperAgents are approaching
-                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents) {
-                        let hunters = sim.agents.filter(a => 
-                            !a.dead && 
-                            a !== this && 
-                            a.isSuperAgent && // Only SuperAgents are threats
-                            a.tribeId !== this.tribeId && 
-                            a.tribeId !== -1 &&
-                            Vector.dist(this.pos, a.pos) < this.senseRad * 1.5 // Extended detection range for SuperAgents
-                        );
+                    if (!behaviorActive && typeof sim !== 'undefined') {
+                        // PERFORMANCE OPTIMIZATION: Use spatial grid for nearby agent lookup
+                        let hunters = [];
+                        if (sim.spatialGrid && sim.gridCols > 0) {
+                            let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 1.5);
+                            hunters = nearby.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent && 
+                                a.tribeId !== this.tribeId && 
+                                a.tribeId !== -1
+                            );
+                        } else {
+                            // Fallback to brute force
+                            hunters = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent && 
+                                a.tribeId !== this.tribeId && 
+                                a.tribeId !== -1 &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 1.5
+                            );
+                        }
                         
                         // Detect if being hunted: enemy SuperAgent is moving toward us
                         for (let hunter of hunters) {
@@ -7001,14 +7140,27 @@
                         
                         // Also hunt/evade enemy SuperAgents from different tribes
                         if (!behaviorActive) {
-                            let enemySuperAgents = sim.agents.filter(a => 
-                                !a.dead && 
-                                a !== this && 
-                                a.isSuperAgent &&
-                                a.tribeId !== this.tribeId && 
-                                a.tribeId !== -1 &&
-                                Vector.dist(this.pos, a.pos) < this.senseRad * 0.8
-                            );
+                            // PERFORMANCE OPTIMIZATION: Use spatial grid
+                            let enemySuperAgents = [];
+                            if (sim.spatialGrid && sim.gridCols > 0) {
+                                let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 0.8);
+                                enemySuperAgents = nearby.agents.filter(a => 
+                                    !a.dead && 
+                                    a !== this && 
+                                    a.isSuperAgent &&
+                                    a.tribeId !== this.tribeId && 
+                                    a.tribeId !== -1
+                                );
+                            } else {
+                                enemySuperAgents = sim.agents.filter(a => 
+                                    !a.dead && 
+                                    a !== this && 
+                                    a.isSuperAgent &&
+                                    a.tribeId !== this.tribeId && 
+                                    a.tribeId !== -1 &&
+                                    Vector.dist(this.pos, a.pos) < this.senseRad * 0.8
+                                );
+                            }
                             
                             if (enemySuperAgents.length > 0) {
                                 let closestEnemy = enemySuperAgents.sort((a, b) => 
@@ -7060,14 +7212,27 @@
                     // Class A: hates B, loves C
                     // Class B: hates C, loves A
                     // Class C: hates A, loves B
-                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents && this.superAgentClass) {
-                        let otherSuperAgents = sim.agents.filter(a => 
-                            !a.dead && 
-                            a !== this && 
-                            a.isSuperAgent &&
-                            a.superAgentClass && // Must have a class
-                            Vector.dist(this.pos, a.pos) < this.senseRad * 2.0 // Long range detection
-                        );
+                    if (!behaviorActive && typeof sim !== 'undefined' && this.superAgentClass) {
+                        // PERFORMANCE OPTIMIZATION: Use spatial grid
+                        // ENHANCED: 20% increased sense range for SuperAgent interactions (2.0 -> 2.4)
+                        let otherSuperAgents = [];
+                        if (sim.spatialGrid && sim.gridCols > 0) {
+                            let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 2.4);
+                            otherSuperAgents = nearby.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.superAgentClass
+                            );
+                        } else {
+                            otherSuperAgents = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.superAgentClass &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 2.4
+                            );
+                        }
                         
                         if (otherSuperAgents.length > 0) {
                             // Determine love/hate relationships based on class
@@ -7133,18 +7298,19 @@
                             }
                             
                             // Execute behavior: Evade first (safety), then hunt, then mate
-                            if (evadeTarget && minEvadeDist < 300) {
+                            // ENHANCED: Increased range by 20% and stronger forces
+                            if (evadeTarget && minEvadeDist < 360) { // 20% increase (300 -> 360)
                                 let awayFrom = Vector.sub(this.pos, evadeTarget.pos);
                                 if (awayFrom.mag() > 0) {
-                                    awayFrom.normalize().mult(4.0); // Very strong evasion
+                                    awayFrom.normalize().mult(5.0); // Stronger evasion (4.0 -> 5.0)
                                     superAgentForce.add(awayFrom);
                                     behaviorActive = true;
                                     this.state = "Evading Hated Class";
                                 }
-                            } else if (huntTarget && minHuntDist < 400) {
+                            } else if (huntTarget && minHuntDist < 480) { // 20% increase (400 -> 480)
                                 let toward = Vector.sub(huntTarget.pos, this.pos);
                                 if (toward.mag() > 0) {
-                                    toward.normalize().mult(3.5); // Strong pursuit
+                                    toward.normalize().mult(4.5); // Stronger pursuit (3.5 -> 4.5)
                                     superAgentForce.add(toward);
                                     behaviorActive = true;
                                     this.state = "Hunting Hated Class";
@@ -7172,10 +7338,10 @@
                                         this.state = "ATTACKING SuperAgent";
                                     }
                                 }
-                            } else if (mateTarget && minMateDist < 300) {
+                            } else if (mateTarget && minMateDist < 360) { // 20% increase (300 -> 360)
                                 let toward = Vector.sub(mateTarget.pos, this.pos);
                                 if (toward.mag() > 0) {
-                                    toward.normalize().mult(1.5); // Gentle approach
+                                    toward.normalize().mult(2.0); // Stronger approach (1.5 -> 2.0)
                                     superAgentForce.add(toward);
                                     behaviorActive = true;
                                     this.state = "Seeking Loved Class";
@@ -7184,7 +7350,90 @@
                         }
                     }
                     
-                    // 4. HUNT FOR FOOD - Seek nearby food resources
+                    // 4. INTERACT WITH GROUP AGENTS - Class-based behavior
+                    // Type A: hunts, attacks, and eats group agents
+                    // Type B: can bond with them, does not harm them
+                    // Type C: avoids them, will not bond, will not harm
+                    if (!behaviorActive && typeof sim !== 'undefined' && this.superAgentClass) {
+                        // PERFORMANCE OPTIMIZATION: Use spatial grid
+                        let nearbyGroupAgents = [];
+                        if (sim.spatialGrid && sim.gridCols > 0) {
+                            let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 1.5);
+                            nearbyGroupAgents = nearby.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isGroupEntity
+                            );
+                        } else {
+                            nearbyGroupAgents = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isGroupEntity &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 1.5
+                            );
+                        }
+                        
+                        if (nearbyGroupAgents.length > 0) {
+                            let closest = nearbyGroupAgents.sort((a, b) => 
+                                Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                            )[0];
+                            let dist = Vector.dist(this.pos, closest.pos);
+                            
+                            if (this.superAgentClass === 'A') {
+                                // Type A: Hunt, attack, and eat group agents
+                                let towardGroup = Vector.sub(closest.pos, this.pos);
+                                if (towardGroup.mag() > 0) {
+                                    towardGroup.normalize().mult(3.0); // Strong pursuit
+                                    superAgentForce.add(towardGroup);
+                                    behaviorActive = true;
+                                    this.state = "Hunting Group Agent";
+                                    
+                                    // COMBAT: Attack and consume when close
+                                    if (dist < this.radius + closest.radius + 10) {
+                                        let damage = 25; // High damage to group agents
+                                        closest.health -= damage;
+                                        
+                                        // Consume energy from the group agent
+                                        let energyGain = Math.min(30, closest.energy * 0.3);
+                                        this.energy += energyGain;
+                                        closest.energy -= energyGain;
+                                        
+                                        // Visual feedback
+                                        if (sim.particles && sim.particles.length < 200) {
+                                            sim.addCombatParticle(closest.pos.x, closest.pos.y, '#dc2626', 'explosion');
+                                        }
+                                        
+                                        this.state = "EATING Group Agent";
+                                    }
+                                }
+                            } else if (this.superAgentClass === 'B') {
+                                // Type B: Can bond with group agents (gentle approach)
+                                // Only bond if not already bonded and close enough
+                                if (dist < 50 && !this.partners.includes(closest)) {
+                                    let towardGroup = Vector.sub(closest.pos, this.pos);
+                                    if (towardGroup.mag() > 0) {
+                                        towardGroup.normalize().mult(1.0); // Gentle approach
+                                        superAgentForce.add(towardGroup);
+                                        behaviorActive = true;
+                                        this.state = "Approaching Group Agent";
+                                    }
+                                }
+                            } else if (this.superAgentClass === 'C') {
+                                // Type C: Avoid group agents
+                                if (dist < 200) {
+                                    let awayFromGroup = Vector.sub(this.pos, closest.pos);
+                                    if (awayFromGroup.mag() > 0) {
+                                        awayFromGroup.normalize().mult(2.0); // Moderate avoidance
+                                        superAgentForce.add(awayFromGroup);
+                                        behaviorActive = true;
+                                        this.state = "Avoiding Group Agent";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 5. HUNT FOR FOOD - Seek nearby food resources
                     if (!behaviorActive && typeof sim !== 'undefined' && sim.resources) {
                         let nearbyFood = sim.resources.filter(r => 
                             r.type === 'FOOD' && 
@@ -7202,17 +7451,31 @@
                         }
                     }
                     
-                    // 4. SCHOOLING BEHAVIOR - Compatible SuperAgents flock together
+                    // 6. SCHOOLING BEHAVIOR - Compatible SuperAgents flock together
                     // Compatible = same tribe AND (same class OR loved class)
-                    if (!behaviorActive && typeof sim !== 'undefined' && sim.agents && this.superAgentClass) {
-                        let compatibleSuperAgents = sim.agents.filter(a => 
-                            !a.dead && 
-                            a !== this && 
-                            a.isSuperAgent &&
-                            a.superAgentClass &&
-                            a.tribeId === this.tribeId && // Same tribe
-                            Vector.dist(this.pos, a.pos) < this.senseRad * 1.5
-                        );
+                    // ENHANCED: 20% increased sense range (1.5 -> 1.8)
+                    if (!behaviorActive && typeof sim !== 'undefined' && this.superAgentClass) {
+                        // PERFORMANCE OPTIMIZATION: Use spatial grid
+                        let compatibleSuperAgents = [];
+                        if (sim.spatialGrid && sim.gridCols > 0) {
+                            let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 1.8);
+                            compatibleSuperAgents = nearby.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.superAgentClass &&
+                                a.tribeId === this.tribeId
+                            );
+                        } else {
+                            compatibleSuperAgents = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                a.superAgentClass &&
+                                a.tribeId === this.tribeId &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 1.8
+                            );
+                        }
                         
                         // Filter for compatible classes (same class or loved class)
                         let getRelationship = (myClass, theirClass) => {
@@ -7254,19 +7517,20 @@
                             });
                             
                             // Average and apply forces
+                            // ENHANCED: 50% stronger schooling forces to overcome high momentum
                             if (schoolmates.length > 0) {
-                                // Cohesion: seek center
+                                // Cohesion: seek center (50% stronger: 3.5 -> 5.25)
                                 cohesion.div(schoolmates.length);
-                                cohesion = this.seek(cohesion).mult(2.5); // Strong pull to overcome momentum
+                                cohesion = this.seek(cohesion).mult(5.25);
                                 
-                                // Alignment: match average velocity
+                                // Alignment: match average velocity (50% stronger: 3.0 -> 4.5)
                                 alignment.div(schoolmates.length);
-                                alignment.sub(this.vel).limit(2.0); // Strong adjustment for high momentum
+                                alignment.sub(this.vel).limit(4.5);
                                 
-                                // Separation: avoid crowding
+                                // Separation: avoid crowding (50% stronger: 5.5 -> 8.25)
                                 if (separationCount > 0) {
                                     separation.div(separationCount);
-                                    separation.mult(4.0); // Very strong to prevent collisions
+                                    separation.mult(8.25);
                                 }
                                 
                                 // Combine flocking forces
@@ -7509,30 +7773,127 @@
                     
                     // SuperAgents no longer have vertex agent abilities
                 } else if (this.isGroupEntity) {
-                    // FEATURE: Group entities break bonds and scatter when entering nest areas
+                    // FEATURE: Group entities STRONGLY AVOID NESTS - Very strong avoidance
+                    let groupAgentForce = new Vector(0, 0);
+                    let groupBehaviorActive = false;
+                    
                     if (typeof sim !== 'undefined' && sim.tribes && sim.tribes.nests) {
+                        let nestAvoidanceForce = new Vector(0, 0);
                         for (let nest of sim.tribes.nests) {
                             let distToNest = Vector.dist(this.pos, nest.pos);
-                            if (distToNest < nest.radius * 2.0) { // Within 2x nest radius
-                                // Break all bonds for this agent and all group members
-                                let group = this.getBondedGroup();
-                                for (let member of group) {
-                                    if (member.partners.length > 0) {
-                                        member.breakAllBonds();
-                                        member.isGroupEntity = false;
-                                        member.groupEntityMembers = [];
-                                        // Apply strong scatter force away from nest
-                                        let awayFromNest = Vector.sub(member.pos, nest.pos);
-                                        if (awayFromNest.mag() > 0) {
-                                            awayFromNest.normalize().mult(5.0); // Strong scatter force
-                                            member.applyForce(awayFromNest);
+                            // VERY STRONG avoidance range - 8x nest radius
+                            if (distToNest < nest.radius * 8.0) {
+                                let awayFromNest = Vector.sub(this.pos, nest.pos);
+                                if (awayFromNest.mag() > 0) {
+                                    // VERY strong avoidance - inverse square law
+                                    let urgency = Math.min(40.0, (nest.radius * 8.0) / Math.max(1, distToNest));
+                                    awayFromNest.normalize().mult(urgency * 4.0); // Up to 160x force!
+                                    nestAvoidanceForce.add(awayFromNest);
+                                }
+                            }
+                        }
+                        
+                        if (nestAvoidanceForce.mag() > 0) {
+                            groupAgentForce.add(nestAvoidanceForce);
+                            groupBehaviorActive = true;
+                            this.state = "FLEEING NEST";
+                            
+                            // Break bonds if too close to nest (emergency scatter)
+                            for (let nest of sim.tribes.nests) {
+                                let distToNest = Vector.dist(this.pos, nest.pos);
+                                if (distToNest < nest.radius * 1.5) {
+                                    let group = this.getBondedGroup();
+                                    for (let member of group) {
+                                        if (member.partners.length > 0) {
+                                            member.breakAllBonds();
+                                            member.isGroupEntity = false;
+                                            member.groupEntityMembers = [];
                                         }
                                     }
+                                    return; // Exit early
                                 }
-                                if (typeof sim !== 'undefined' && sim.debugPerformance) {
-                                    console.log(`💥 GROUP ENTITY SCATTERED: Near nest, all bonds broken`);
+                            }
+                        }
+                    }
+                    
+                    // FEATURE: Group entities seek SuperAgents (but are slower so rarely catch them)
+                    if (!groupBehaviorActive && typeof sim !== 'undefined') {
+                        // PERFORMANCE OPTIMIZATION: Use spatial grid
+                        let superAgents = [];
+                        if (sim.spatialGrid && sim.gridCols > 0) {
+                            let nearby = sim.getNearbyEntities(this.pos.x, this.pos.y, this.senseRad * 1.5);
+                            superAgents = nearby.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent
+                            );
+                        } else {
+                            superAgents = sim.agents.filter(a => 
+                                !a.dead && 
+                                a !== this && 
+                                a.isSuperAgent &&
+                                Vector.dist(this.pos, a.pos) < this.senseRad * 1.5
+                            );
+                        }
+                        
+                        if (superAgents.length > 0) {
+                            // Find closest SuperAgent
+                            let closest = superAgents.sort((a, b) => 
+                                Vector.dist(this.pos, a.pos) - Vector.dist(this.pos, b.pos)
+                            )[0];
+                            
+                            let towardSuperAgent = Vector.sub(closest.pos, this.pos);
+                            if (towardSuperAgent.mag() > 0) {
+                                towardSuperAgent.normalize().mult(2.0); // Moderate seeking force
+                                groupAgentForce.add(towardSuperAgent);
+                                groupBehaviorActive = true;
+                                this.state = "Seeking SuperAgent";
+                            }
+                        }
+                    }
+                    
+                    // FEATURE: Group Leadership - Strongest member leads and exerts more force
+                    // Determine the leader of this group (strongest member)
+                    let group = this.getBondedGroup();
+                    let groupLeader = null;
+                    let maxStrength = -Infinity;
+                    
+                    for (let member of group) {
+                        let strength = member.health + member.energy + (member.age * 0.1);
+                        if (strength > maxStrength) {
+                            maxStrength = strength;
+                            groupLeader = member;
+                        }
+                    }
+                    
+                    // Store leader reference for visualization/debugging
+                    this.groupLeader = groupLeader;
+                    
+                    // Apply group agent forces with leadership influence
+                    if (groupBehaviorActive && groupAgentForce.mag() > 0) {
+                        // ENHANCED: Leader exerts 50% stronger force, scaled to group size to overwhelm members
+                        // Base multiplier: 3.0 -> 4.5 (50% increase)
+                        // Scale with group size to ensure leader can pull even large groups
+                        let groupSizeScale = 1.0 + (group.length * 0.2); // +20% per member
+                        let leaderMultiplier = (this === groupLeader) ? (4.5 * groupSizeScale) : 1.0;
+                        groupAgentForce.mult(2.0 * leaderMultiplier); // Base 2.0x, leader gets 9.0x+ (scaled)
+                        this.applyForce(groupAgentForce);
+                    }
+                    
+                    // Leader also influences the direction of other group members
+                    // PERFORMANCE: Throttle this expensive operation (only every 2 frames)
+                    if (this === groupLeader && group.length > 1 && sim.frame % 2 === 0) {
+                        // ENHANCED: Leader's pull scales with group size (50% stronger base, +group scaling)
+                        let leaderDirection = this.vel.copy().normalize();
+                        if (leaderDirection.mag() > 0) {
+                            // Scale pull strength with group size to overwhelm larger groups
+                            let pullStrength = 0.75 * (1.0 + (group.length * 0.15)); // 50% stronger (0.5->0.75), +15% per member
+                            for (let member of group) {
+                                if (member !== this && !member.dead) {
+                                    // Apply leader's direction as a strong steering force
+                                    let steerToLeader = leaderDirection.copy().mult(pullStrength);
+                                    member.applyForce(steerToLeader);
                                 }
-                                return; // Exit early, bonds are broken
                             }
                         }
                     }
@@ -7599,6 +7960,65 @@
                 
                 this.acc.mult(0);
                 this.boundaries();
+            }
+
+            getRoleAttractionRepulsion(myRole, otherRole, isSameTribe, isHunting = false) {
+                // Returns attraction/repulsion force multiplier (-1 to 1)
+                // Negative = repulsion, Positive = attraction, 0 = neutral
+                // Compatible with agent goals (hunters don't repel their prey)
+                
+                // If hunting this agent type, override with strong attraction
+                if (isHunting) return 0.8;
+                
+                // Same tribe interactions (generally cooperative)
+                if (isSameTribe) {
+                    const sameTribeMatrix = {
+                        'Soldier': { 'Soldier': 0.3, 'Guardian': 0.4, 'Raider': 0.3, 'Scout': 0.2, 'Healer': 0.1, 'Builder': -0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0.1, 'Diplomat': 0, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': -0.1, 'Grazer': -0.2, 'Monster': -0.9 },
+                        'Guardian': { 'Soldier': 0.4, 'Guardian': 0.5, 'Raider': 0.2, 'Scout': 0.1, 'Healer': 0.2, 'Builder': 0.3, 'Gatherer': 0.2, 'Farmer': 0.2, 'Miner': 0.1, 'Botanist': 0.2, 'Artisan': 0.1, 'Merchant': 0.1, 'Diplomat': 0.2, 'Scientist': 0.2, 'Teacher': 0.2, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                        'Raider': { 'Soldier': 0.3, 'Guardian': 0.2, 'Raider': 0.4, 'Scout': 0.3, 'Healer': 0, 'Builder': -0.2, 'Gatherer': 0.1, 'Farmer': 0, 'Miner': 0.1, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0.2, 'Diplomat': -0.1, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': -0.2, 'Grazer': -0.3, 'Monster': -0.8 },
+                        'Scout': { 'Soldier': 0.2, 'Guardian': 0.1, 'Raider': 0.3, 'Scout': 0.3, 'Healer': 0, 'Builder': 0, 'Gatherer': 0.2, 'Farmer': 0.1, 'Miner': 0.2, 'Botanist': 0.1, 'Artisan': 0, 'Merchant': 0.3, 'Diplomat': 0.2, 'Scientist': 0.1, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': -0.1, 'Monster': -0.9 },
+                        'Healer': { 'Soldier': 0.1, 'Guardian': 0.2, 'Raider': 0, 'Scout': 0, 'Healer': 0.4, 'Builder': 0.1, 'Gatherer': 0.2, 'Farmer': 0.3, 'Miner': 0.1, 'Botanist': 0.4, 'Artisan': 0.1, 'Merchant': 0.1, 'Diplomat': 0.2, 'Scientist': 0.3, 'Teacher': 0.3, 'Garbage Collector': 0.2, 'Grazer': 0.1, 'Monster': -0.9 },
+                        'Builder': { 'Soldier': -0.1, 'Guardian': 0.3, 'Raider': -0.2, 'Scout': 0, 'Healer': 0.1, 'Builder': 0.3, 'Gatherer': 0.2, 'Farmer': 0.1, 'Miner': 0.4, 'Botanist': 0.1, 'Artisan': 0.5, 'Merchant': 0.2, 'Diplomat': 0.1, 'Scientist': 0.2, 'Teacher': 0.1, 'Garbage Collector': 0.3, 'Grazer': 0, 'Monster': -0.9 },
+                        'Gatherer': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': 0.1, 'Scout': 0.2, 'Healer': 0.2, 'Builder': 0.2, 'Gatherer': 0.2, 'Farmer': 0.3, 'Miner': 0.2, 'Botanist': 0.3, 'Artisan': 0.2, 'Merchant': 0.4, 'Diplomat': 0.1, 'Scientist': 0.1, 'Teacher': 0.1, 'Garbage Collector': 0.2, 'Grazer': 0, 'Monster': -0.9 },
+                        'Farmer': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': 0, 'Scout': 0.1, 'Healer': 0.3, 'Builder': 0.1, 'Gatherer': 0.3, 'Farmer': 0.3, 'Miner': 0.1, 'Botanist': 0.5, 'Artisan': 0.2, 'Merchant': 0.3, 'Diplomat': 0.1, 'Scientist': 0.2, 'Teacher': 0.2, 'Garbage Collector': 0.2, 'Grazer': 0.6, 'Monster': -0.9 },
+                        'Miner': { 'Soldier': 0, 'Guardian': 0.1, 'Raider': 0.1, 'Scout': 0.2, 'Healer': 0.1, 'Builder': 0.4, 'Gatherer': 0.2, 'Farmer': 0.1, 'Miner': 0.3, 'Botanist': 0.1, 'Artisan': 0.4, 'Merchant': 0.3, 'Diplomat': 0.1, 'Scientist': 0.2, 'Teacher': 0.1, 'Garbage Collector': 0.3, 'Grazer': 0, 'Monster': -0.9 },
+                        'Botanist': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': 0, 'Scout': 0.1, 'Healer': 0.4, 'Builder': 0.1, 'Gatherer': 0.3, 'Farmer': 0.5, 'Miner': 0.1, 'Botanist': 0.4, 'Artisan': 0.2, 'Merchant': 0.2, 'Diplomat': 0.2, 'Scientist': 0.4, 'Teacher': 0.3, 'Garbage Collector': 0.2, 'Grazer': 0.4, 'Monster': -0.9 },
+                        'Artisan': { 'Soldier': 0, 'Guardian': 0.1, 'Raider': 0, 'Scout': 0, 'Healer': 0.1, 'Builder': 0.5, 'Gatherer': 0.2, 'Farmer': 0.2, 'Miner': 0.4, 'Botanist': 0.2, 'Artisan': 0.4, 'Merchant': 0.6, 'Diplomat': 0.2, 'Scientist': 0.3, 'Teacher': 0.2, 'Garbage Collector': 0.3, 'Grazer': 0, 'Monster': -0.9 },
+                        'Merchant': { 'Soldier': 0.1, 'Guardian': 0.1, 'Raider': 0.2, 'Scout': 0.3, 'Healer': 0.1, 'Builder': 0.2, 'Gatherer': 0.4, 'Farmer': 0.3, 'Miner': 0.3, 'Botanist': 0.2, 'Artisan': 0.6, 'Merchant': 0.5, 'Diplomat': 0.6, 'Scientist': 0.2, 'Teacher': 0.2, 'Garbage Collector': 0.2, 'Grazer': 0, 'Monster': -0.9 },
+                        'Diplomat': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': -0.1, 'Scout': 0.2, 'Healer': 0.2, 'Builder': 0.1, 'Gatherer': 0.1, 'Farmer': 0.1, 'Miner': 0.1, 'Botanist': 0.2, 'Artisan': 0.2, 'Merchant': 0.6, 'Diplomat': 0.5, 'Scientist': 0.4, 'Teacher': 0.5, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                        'Scientist': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': 0, 'Scout': 0.1, 'Healer': 0.3, 'Builder': 0.2, 'Gatherer': 0.1, 'Farmer': 0.2, 'Miner': 0.2, 'Botanist': 0.4, 'Artisan': 0.3, 'Merchant': 0.2, 'Diplomat': 0.4, 'Scientist': 0.6, 'Teacher': 0.6, 'Garbage Collector': 0.2, 'Grazer': 0, 'Monster': -0.9 },
+                        'Teacher': { 'Soldier': 0, 'Guardian': 0.2, 'Raider': 0, 'Scout': 0, 'Healer': 0.3, 'Builder': 0.1, 'Gatherer': 0.1, 'Farmer': 0.2, 'Miner': 0.1, 'Botanist': 0.3, 'Artisan': 0.2, 'Merchant': 0.2, 'Diplomat': 0.5, 'Scientist': 0.6, 'Teacher': 0.5, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                        'Garbage Collector': { 'Soldier': -0.1, 'Guardian': 0, 'Raider': -0.2, 'Scout': 0, 'Healer': 0.2, 'Builder': 0.3, 'Gatherer': 0.2, 'Farmer': 0.2, 'Miner': 0.3, 'Botanist': 0.2, 'Artisan': 0.3, 'Merchant': 0.2, 'Diplomat': 0.1, 'Scientist': 0.2, 'Teacher': 0.1, 'Garbage Collector': 0.3, 'Grazer': 0, 'Monster': -0.9 },
+                        'Grazer': { 'Soldier': -0.2, 'Guardian': 0, 'Raider': -0.3, 'Scout': -0.1, 'Healer': 0.1, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0.6, 'Miner': 0, 'Botanist': 0.4, 'Artisan': 0, 'Merchant': 0, 'Diplomat': 0, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0.5, 'Monster': -0.9 },
+                        'Monster': { 'Soldier': -0.9, 'Guardian': -0.9, 'Raider': -0.8, 'Scout': -0.9, 'Healer': -0.9, 'Builder': -0.9, 'Gatherer': -0.9, 'Farmer': -0.9, 'Miner': -0.9, 'Botanist': -0.9, 'Artisan': -0.9, 'Merchant': -0.9, 'Diplomat': -0.9, 'Scientist': -0.9, 'Teacher': -0.9, 'Garbage Collector': -0.9, 'Grazer': -0.9, 'Monster': 0.6 }
+                    };
+                    
+                    return (sameTribeMatrix[myRole] && sameTribeMatrix[myRole][otherRole]) || 0;
+                }
+                
+                // Enemy tribe interactions (generally hostile or cautious)
+                const enemyTribeMatrix = {
+                    'Soldier': { 'Soldier': -0.4, 'Guardian': -0.5, 'Raider': -0.5, 'Scout': -0.3, 'Healer': -0.1, 'Builder': 0, 'Gatherer': -0.2, 'Farmer': -0.1, 'Miner': -0.1, 'Botanist': -0.1, 'Artisan': 0, 'Merchant': 0.1, 'Diplomat': 0.2, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': -0.3, 'Monster': -0.9 },
+                    'Guardian': { 'Soldier': -0.5, 'Guardian': -0.6, 'Raider': -0.6, 'Scout': -0.2, 'Healer': 0, 'Builder': 0, 'Gatherer': -0.1, 'Farmer': 0, 'Miner': 0, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0.1, 'Diplomat': 0.3, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Raider': { 'Soldier': -0.5, 'Guardian': -0.6, 'Raider': -0.4, 'Scout': -0.2, 'Healer': 0, 'Builder': 0.1, 'Gatherer': 0.2, 'Farmer': 0.1, 'Miner': 0.2, 'Botanist': 0.1, 'Artisan': 0.2, 'Merchant': 0.3, 'Diplomat': 0, 'Scientist': 0.1, 'Teacher': 0, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.8 },
+                    'Scout': { 'Soldier': -0.3, 'Guardian': -0.2, 'Raider': -0.2, 'Scout': 0, 'Healer': 0, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0.2, 'Diplomat': 0.3, 'Scientist': 0.1, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Healer': { 'Soldier': -0.1, 'Guardian': 0, 'Raider': 0, 'Scout': 0, 'Healer': 0.2, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0.1, 'Artisan': 0, 'Merchant': 0.1, 'Diplomat': 0.3, 'Scientist': 0.2, 'Teacher': 0.2, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Builder': { 'Soldier': 0, 'Guardian': 0, 'Raider': 0.1, 'Scout': 0, 'Healer': 0, 'Builder': 0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0.1, 'Botanist': 0, 'Artisan': 0.1, 'Merchant': 0.2, 'Diplomat': 0.2, 'Scientist': 0.1, 'Teacher': 0, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Gatherer': { 'Soldier': -0.2, 'Guardian': -0.1, 'Raider': 0.2, 'Scout': 0, 'Healer': 0, 'Builder': 0, 'Gatherer': 0.1, 'Farmer': 0, 'Miner': 0, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0.3, 'Diplomat': 0.2, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Farmer': { 'Soldier': -0.1, 'Guardian': 0, 'Raider': 0.1, 'Scout': 0, 'Healer': 0, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0.1, 'Miner': 0, 'Botanist': 0.1, 'Artisan': 0, 'Merchant': 0.2, 'Diplomat': 0.2, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Miner': { 'Soldier': -0.1, 'Guardian': 0, 'Raider': 0.2, 'Scout': 0, 'Healer': 0, 'Builder': 0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0.1, 'Botanist': 0, 'Artisan': 0.1, 'Merchant': 0.3, 'Diplomat': 0.1, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Botanist': { 'Soldier': -0.1, 'Guardian': 0, 'Raider': 0.1, 'Scout': 0, 'Healer': 0.1, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0.1, 'Miner': 0, 'Botanist': 0.2, 'Artisan': 0, 'Merchant': 0.2, 'Diplomat': 0.3, 'Scientist': 0.2, 'Teacher': 0.1, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Artisan': { 'Soldier': 0, 'Guardian': 0, 'Raider': 0.2, 'Scout': 0, 'Healer': 0, 'Builder': 0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0.1, 'Botanist': 0, 'Artisan': 0.2, 'Merchant': 0.5, 'Diplomat': 0.3, 'Scientist': 0.1, 'Teacher': 0, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Merchant': { 'Soldier': 0.1, 'Guardian': 0.1, 'Raider': 0.3, 'Scout': 0.2, 'Healer': 0.1, 'Builder': 0.2, 'Gatherer': 0.3, 'Farmer': 0.2, 'Miner': 0.3, 'Botanist': 0.2, 'Artisan': 0.5, 'Merchant': 0.6, 'Diplomat': 0.7, 'Scientist': 0.2, 'Teacher': 0.1, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Diplomat': { 'Soldier': 0.2, 'Guardian': 0.3, 'Raider': 0, 'Scout': 0.3, 'Healer': 0.3, 'Builder': 0.2, 'Gatherer': 0.2, 'Farmer': 0.2, 'Miner': 0.1, 'Botanist': 0.3, 'Artisan': 0.3, 'Merchant': 0.7, 'Diplomat': 0.8, 'Scientist': 0.4, 'Teacher': 0.4, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Scientist': { 'Soldier': 0, 'Guardian': 0, 'Raider': 0.1, 'Scout': 0.1, 'Healer': 0.2, 'Builder': 0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0.2, 'Artisan': 0.1, 'Merchant': 0.2, 'Diplomat': 0.4, 'Scientist': 0.5, 'Teacher': 0.4, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Teacher': { 'Soldier': 0, 'Guardian': 0, 'Raider': 0, 'Scout': 0, 'Healer': 0.2, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0.1, 'Artisan': 0, 'Merchant': 0.1, 'Diplomat': 0.4, 'Scientist': 0.4, 'Teacher': 0.4, 'Garbage Collector': 0, 'Grazer': 0, 'Monster': -0.9 },
+                    'Garbage Collector': { 'Soldier': 0, 'Guardian': 0, 'Raider': 0.1, 'Scout': 0, 'Healer': 0, 'Builder': 0.1, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0.1, 'Botanist': 0, 'Artisan': 0.1, 'Merchant': 0.1, 'Diplomat': 0.1, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0.1, 'Grazer': 0, 'Monster': -0.9 },
+                    'Grazer': { 'Soldier': -0.3, 'Guardian': 0, 'Raider': 0, 'Scout': 0, 'Healer': 0, 'Builder': 0, 'Gatherer': 0, 'Farmer': 0, 'Miner': 0, 'Botanist': 0, 'Artisan': 0, 'Merchant': 0, 'Diplomat': 0, 'Scientist': 0, 'Teacher': 0, 'Garbage Collector': 0, 'Grazer': 0.3, 'Monster': -0.9 },
+                    'Monster': { 'Soldier': -0.9, 'Guardian': -0.9, 'Raider': -0.8, 'Scout': -0.9, 'Healer': -0.9, 'Builder': -0.9, 'Gatherer': -0.9, 'Farmer': -0.9, 'Miner': -0.9, 'Botanist': -0.9, 'Artisan': -0.9, 'Merchant': -0.9, 'Diplomat': -0.9, 'Scientist': -0.9, 'Teacher': -0.9, 'Garbage Collector': -0.9, 'Grazer': -0.9, 'Monster': 0.6 }
+                };
+                
+                return (enemyTribeMatrix[myRole] && enemyTribeMatrix[myRole][otherRole]) || 0;
             }
 
             wander() {
@@ -7736,8 +8156,52 @@
                     raid: new Vector(0,0),
                     trade: new Vector(0,0),
                     bond: new Vector(0,0),
-                    war: new Vector(0,0) 
+                    war: new Vector(0,0),
+                    roleAttraction: new Vector(0,0) // Role-based attraction/repulsion
                 };
+
+                // ROLE-BASED ATTRACTION/REPULSION SYSTEM
+                // Apply attraction/repulsion forces based on role interactions
+                if (localAgents.length > 0 && this.role) {
+                    for (let other of localAgents) {
+                        if (!other || other.dead || !other.role) continue;
+                        
+                        let d = Vector.dist(this.pos, other.pos);
+                        if (d < 1 || d > 150) continue; // Only affect nearby agents (within 150 units)
+                        
+                        let isSameTribe = (this.tribeId !== -1 && this.tribeId === other.tribeId);
+                        
+                        // Check if we're actively hunting this agent
+                        let isHunting = false;
+                        if (this.role === 'Soldier' || this.role === 'Raider' || this.role === 'Monster') {
+                            if (!isSameTribe && other.tribeId !== -1) {
+                                isHunting = true;
+                            }
+                        }
+                        if (this.role === 'Monster' && other.role !== 'Monster') {
+                            isHunting = true;
+                        }
+                        
+                        // Get attraction/repulsion value (-1 to 1)
+                        let attractionValue = this.getRoleAttractionRepulsion(this.role, other.role, isSameTribe, isHunting);
+                        
+                        if (Math.abs(attractionValue) > 0.05) { // Only apply if significant
+                            let direction = Vector.sub(other.pos, this.pos).normalize();
+                            
+                            // Attraction (positive value) - move toward
+                            // Repulsion (negative value) - move away
+                            if (attractionValue > 0) {
+                                // Attraction: seek the other agent
+                                let strength = attractionValue * (1 - d / 150); // Stronger when closer
+                                forces.roleAttraction.add(direction.mult(strength * 0.5));
+                            } else {
+                                // Repulsion: flee from the other agent
+                                let strength = Math.abs(attractionValue) * (1 - d / 150); // Stronger when closer
+                                forces.roleAttraction.add(direction.mult(-strength * 0.5));
+                            }
+                        }
+                    }
+                }
 
                 // Nest Logic - Get nest reference early (needed for builder logic)
                 let myNest = sim.tribes.nests.find(n => n.tribeId === this.tribeId);
@@ -7855,7 +8319,7 @@
                         forces.base, forces.food, forces.mine,
                         forces.raid, forces.trade, forces.hunt,
                         forces.flee, forces.social, forces.wander,
-                        forces.bond
+                        forces.bond, forces.roleAttraction
                     ];
                     let movementForce = new Vector(0, 0);
                     let contributionCount = 0;
@@ -8023,6 +8487,50 @@
                             this.defense = Math.max(this.defense || 0, 0.8); // High defense (80% damage reduction)
                             this.shieldBonus = Math.max(this.shieldBonus || 0, 0.8); // Apply as shield bonus for damage reduction
                             
+                            // FEATURE: Nest leader return-to-nest behavior (every 200 steps)
+                            if (!this.leaderReturnTimer) this.leaderReturnTimer = 0;
+                            if (!this.leaderAtNest) this.leaderAtNest = false;
+                            
+                            this.leaderReturnTimer++;
+                            
+                            // Return to nest every 200 steps
+                            if (this.leaderReturnTimer >= 200 && !this.leaderAtNest) {
+                                // Force return to nest
+                                let toNest = Vector.sub(myNest.pos, this.pos);
+                                if (toNest.mag() > myNest.radius) {
+                                    // Not at nest yet - move toward it
+                                    forces.leader = toNest.normalize().mult(2.0); // Strong pull to nest
+                                    this.state = "Returning to Nest";
+                                } else {
+                                    // Arrived at nest
+                                    this.leaderAtNest = true;
+                                    this.leaderReturnTimer = 0;
+                                    this.leaderLeaveTimer = 0; // Start leave timer
+                                }
+                            }
+                            
+                            // Must leave nest after returning (by at least 2x nest diameter)
+                            if (this.leaderAtNest) {
+                                if (!this.leaderLeaveTimer) this.leaderLeaveTimer = 0;
+                                this.leaderLeaveTimer++;
+                                
+                                let minLeaveDistance = myNest.radius * 4; // 2x diameter = 4x radius
+                                if (distToNest < minLeaveDistance) {
+                                    // Force leave nest
+                                    let awayFromNest = Vector.sub(this.pos, myNest.pos);
+                                    if (awayFromNest.mag() < 1) {
+                                        // At center - pick random direction
+                                        awayFromNest = new Vector(Math.random() * 2 - 1, Math.random() * 2 - 1);
+                                    }
+                                    forces.leader = awayFromNest.normalize().mult(1.5); // Push away from nest
+                                    this.state = "Leaving Nest";
+                                } else {
+                                    // Far enough - can roam freely now
+                                    this.leaderAtNest = false;
+                                    this.leaderReturnTimer = 0; // Reset return timer
+                                }
+                            }
+                            
                             // PERFORMANCE: Consolidate nearby queries - only query once per frame
                             let nearbyAgents = null;
                             let nearbyResources = null;
@@ -8183,13 +8691,19 @@
                                             agent.health -= damage;
                                             agent.energy -= damage * 0.5;
                                             sim.addCombatParticle(agent.pos.x, agent.pos.y, '#ef4444', 'spark');
-                                            if (!active) { this.state = "Attacking Enemy"; active = true; }
+                                            if (!active) { 
+                                                this.state = "Attacking Enemy"; 
+                                                active = true; 
+                                            }
                                             break;
                     } else {
                                             // Seek enemy
                                             let seekForce = Vector.sub(agent.pos, this.pos).normalize().mult(0.5);
                                             forces.hunt.add(seekForce);
-                                            if (!active) { this.state = "Hunting Enemy"; active = true; }
+                                            if (!active) { 
+                                                this.state = "Hunting Enemy"; 
+                                                active = true; 
+                                            }
                                         }
                                     }
                                 }
@@ -8203,12 +8717,18 @@
                                     enemyLeader.health -= damage;
                                     enemyLeader.energy -= damage * 0.5;
                                     sim.addCombatParticle(enemyLeader.pos.x, enemyLeader.pos.y, '#dc2626', 'spark');
-                                    if (!active) { this.state = "Attacking Enemy Leader"; active = true; }
+                                    if (!active) { 
+                                        this.state = "Attacking Enemy Leader"; 
+                                        active = true; 
+                                    }
                                 } else {
                                     // Seek enemy leader
                                     let seekForce = Vector.sub(enemyLeader.pos, this.pos).normalize().mult(0.6);
                                     forces.hunt.add(seekForce);
-                                    if (!active) { this.state = "Hunting Enemy Leader"; active = true; }
+                                    if (!active) { 
+                                        this.state = "Hunting Enemy Leader"; 
+                                        active = true; 
+                                    }
                                 }
                             }
                             
@@ -8543,14 +9063,16 @@
                     let rigidRatio = (rigidCount / totalBonds);
                     let bandMultiplier = this.structureBandActive ? CONFIG.structureStabilityBandBonus : 1;
                     let stabilityBonus = 1 + this.structureStability * 0.002 * bandMultiplier;
-                    // Limit elastic bond length for group agents
-                    let maxElasticLength = 150;
+                    // Limit elastic bond length for all agents (made tighter)
+                    let maxElasticLength = 80; // Reduced from 150 to make bonds tighter
                     if ((this.isGroupEntity || (p && p.isGroupEntity)) && !rigidType) {
-                        maxElasticLength = CONFIG.groupAgentElasticBondMaxLength || 180;
+                        maxElasticLength = CONFIG.groupAgentElasticBondMaxLength || 110; // Reduced from 180
                     }
-                    let breakDist = (rigidType ? 200 : maxElasticLength) + (rigidRatio * 40) * stabilityBonus;
+                    // FEATURE: Group bonds are much harder to break
+                    let groupBondMultiplier = (rigidType === 'group') ? 2.5 : 1.0; // Group bonds 2.5x harder to break
+                    let breakDist = ((rigidType ? 200 : maxElasticLength) + (rigidRatio * 40) * stabilityBonus) * groupBondMultiplier;
                     let baseResistance = rigidType ? CONFIG.rigidBondBreakResistance : 1.0;
-                    let breakResistance = baseResistance * (1 + rigidRatio * 0.75) * stabilityBonus;
+                    let breakResistance = baseResistance * (1 + rigidRatio * 0.75) * stabilityBonus * groupBondMultiplier;
                     
                     if (d > breakDist || this.getNetLoyalty(p) < -10 * breakResistance) {
                         this.removePartner(p);
@@ -8565,6 +9087,10 @@
                             if (rigidType === 'geometric') {
                                 rigidLength = 20; // Very short (was 35)
                                 stiffness = 2.0; // Extremely rigid (was 0.43) - 4.6x stronger!
+                            } else if (rigidType === 'group') {
+                                // FEATURE: Group agent bonds are shorter and more rigid
+                                rigidLength = 25; // Shorter than normal rigid bonds (35)
+                                stiffness = 1.5; // More rigid than normal (0.43) - 3.5x stronger!
                             }
                             
                             let displacement = d - rigidLength;
@@ -8685,10 +9211,10 @@
                                 }
                             }
                         } else {
-                            // Elastic bond: flexible spring, weighted by partner strength
+                            // Elastic bond: flexible spring, weighted by partner strength (made tighter)
                         let idealDist = this.radius + p.radius + 5;
                         let displacement = d - idealDist;
-                            let k = 0.05 * partnerStrength; // Weight by strength
+                            let k = 0.15 * partnerStrength; // Increased from 0.05 to 0.15 for tighter bonds
                         let force = Vector.sub(p.pos, this.pos).normalize().mult(displacement * k);
                         
                         // FEATURE: SuperAgents are barely influenced by elastic bonds from small agents
@@ -8894,7 +9420,10 @@
                         if (isInBondedGroup) continue;
                         
                         let d = Vector.dist(this.pos, a.pos);
-                        if(d < dNear) { dNear = d; nearest = a; }
+                        if(d < dNear) { 
+                            dNear = d; 
+                            nearest = a; 
+                        }
                     }
                     if(nearest) {
                         forces.hunt = this.seek(nearest.pos).mult(2.0);
@@ -9088,7 +9617,10 @@
                     for(let r of searchPool) {
                         if((r.type === 'MAT' || r.type === 'ORE') && !r.carrier && r.active) {
                             let d = Vector.dist(this.pos, r.pos);
-                            if (d < dTarget) { dTarget = d; target = r; }
+                            if (d < dTarget) { 
+                                dTarget = d; 
+                                target = r; 
+                            }
                         }
                     }
                     if(target) {
@@ -9277,7 +9809,10 @@
                         for(let a of localAgents) {
                             if (a.tribeId !== this.tribeId && a.tribeId !== -1) {
                                 let d = Vector.dist(this.pos, a.pos);
-                                if (d < minDist) { minDist = d; target = a; }
+                                if (d < minDist) { 
+                                    minDist = d; 
+                                    target = a; 
+                                }
                             }
                         }
                         if (target) {
@@ -10579,8 +11114,16 @@
                                                 if (this.energy > this.maxEnergy) this.energy = this.maxEnergy;
                                                 this.wealth += 1; // Food is money
                                             }
-                                            if (r.type === 'STIM') { this.energy += 50; this.frenzyTimer = 300; }
-                                            if (r.type === 'HERB') { this.disease = 0; this.health += 50; this.immunity = 500; sim.particles.push(new Particle(this.pos.x, this.pos.y, '#e879f9', 'spark')); }
+                                            if (r.type === 'STIM') { 
+                                                this.energy += 50; 
+                                                this.frenzyTimer = 300; 
+                                            }
+                                            if (r.type === 'HERB') { 
+                                                this.disease = 0; 
+                                                this.health += 50; 
+                                                this.immunity = 500; 
+                                                sim.particles.push(new Particle(this.pos.x, this.pos.y, '#e879f9', 'spark')); 
+                                            }
                                             
                                             // UNIQUE RESOURCES: amplify specific gene
                                             if (r.type === 'UNIQUE') {
@@ -10645,7 +11188,10 @@
 
                 if (foodCount > 0 && !this.carrying && this.role !== 'Miner' && this.role !== 'Raider' && this.role !== 'Merchant' && this.isAdult()) {
                     forces.food = foodScent.normalize().mult(this.maxSpeed * (hunger * 3 + 0.5));
-                    if (forces.food.mag() > 0.1) { this.state = "Foraging"; active = true; }
+                    if (forces.food.mag() > 0.1) { 
+                        this.state = "Foraging"; 
+                        active = true; 
+                    }
                 }
 
                 // BASE RETURN & BUILDING
@@ -11010,6 +11556,13 @@
                             let avgRigidPref = (this.dna.rigid_bond_preference + other.dna.rigid_bond_preference) / 2;
                             let rigidBonus = 1.0 + (avgRigidPref * CONFIG.rigidBondFormationBonus);
                             bondChance *= rigidBonus;
+                            
+                            // FEATURE: Group entities preferentially bond with non-group agents (extremely strong bonds)
+                            if (this.isGroupEntity && !other.isGroupEntity) {
+                                bondChance *= 10.0; // 10x more likely to bond
+                            } else if (!this.isGroupEntity && other.isGroupEntity) {
+                                bondChance *= 10.0; // 10x more likely to bond
+                            }
                             
                             // Apply nest-tethered penalty
                             bondChance *= nestBondPenalty;
@@ -11504,6 +12057,84 @@
                             }
                             
                             if (Math.random() < mateChance) {
+                                // FEATURE: Group entities mate to produce baby group agents!
+                                if (this.isGroupEntity && other.isGroupEntity && typeof sim !== 'undefined') {
+                                    // Create 3 baby group agents (groups of 5 with extremely rigid bonds)
+                                    let mateX = (this.pos.x + other.pos.x) / 2;
+                                    let mateY = (this.pos.y + other.pos.y) / 2;
+                                    
+                                    for (let groupIdx = 0; groupIdx < 3; groupIdx++) {
+                                        // Spawn each baby group in a circle around mating location
+                                        let groupAngle = (Math.PI * 2 / 3) * groupIdx;
+                                        let groupDist = 60;
+                                        let groupX = mateX + Math.cos(groupAngle) * groupDist;
+                                        let groupY = mateY + Math.sin(groupAngle) * groupDist;
+                                        
+                                        // Create 5 agents for this baby group
+                                        let babyGroup = [];
+                                        for (let i = 0; i < 5; i++) {
+                                            // Mix DNA from both parents
+                                            let childDNA = {};
+                                            for (let key in this.dna) {
+                                                if (Math.random() < 0.5) {
+                                                    childDNA[key] = this.dna[key];
+                                                } else {
+                                                    childDNA[key] = other.dna[key] || this.dna[key];
+                                                }
+                                                // Add mutation
+                                                if (typeof childDNA[key] === 'number') {
+                                                    childDNA[key] += (Math.random() - 0.5) * 0.3;
+                                                    childDNA[key] = Math.max(0, Math.min(1, childDNA[key]));
+                                                }
+                                            }
+                                            
+                                            // Spawn in pentagon formation
+                                            let angle = (Math.PI * 2 / 5) * i;
+                                            let spawnDist = 15;
+                                            let spawnX = groupX + Math.cos(angle) * spawnDist;
+                                            let spawnY = groupY + Math.sin(angle) * spawnDist;
+                                            
+                                            let baby = new Agent(spawnX, spawnY, childDNA, {p1: this, p2: other}, this.tribeId);
+                                            baby.age = 80; // Start mature
+                                            baby.assignColor();
+                                            sim.agents.push(baby);
+                                            babyGroup.push(baby);
+                                        }
+                                        
+                                        // Create EXTREMELY RIGID bonds between all members (fully connected)
+                                        for (let i = 0; i < babyGroup.length; i++) {
+                                            for (let j = i + 1; j < babyGroup.length; j++) {
+                                                babyGroup[i].addPartner(babyGroup[j], 'rigid');
+                                                babyGroup[i].rigidBonds[babyGroup[j].id] = 'group';
+                                                babyGroup[j].rigidBonds[babyGroup[i].id] = 'group';
+                                            }
+                                        }
+                                        
+                                        // Set high initial stability for baby groups
+                                        babyGroup.forEach(baby => {
+                                            baby.structureStability = CONFIG.structureStabilityCap * 0.9; // 90% stability
+                                            baby.isGroupEntity = true;
+                                            baby.groupEntityMembers = babyGroup.map(b => b.id);
+                                            // Enhanced stats for group entities
+                                            baby.mass = (baby.baseRadius * (baby.health / 100)) * 5;
+                                            baby.maxSpeed = baby.baseSpeed * 1.8;
+                                            baby.maxForce = 0.3 * 2;
+                                        });
+                                    }
+                                    
+                                    // Energy cost and cooldown
+                                    this.energy -= 100;
+                                    other.energy -= 100;
+                                    this.mateCooldown = 600; // Long cooldown
+                                    other.mateCooldown = 600;
+                                    
+                                    // Visual effect
+                                    sim.particles.push(new Particle(mateX, mateY, '#10b981', 'star'));
+                                    sim.particles.push(new Particle(mateX, mateY, '#10b981', 'explosion'));
+                                    
+                                    return; // Skip normal mating
+                                }
+                                
                                 // NEW NEST FERTILITY BOOST - 10% higher birth/mating rates for new nests (first 1000 frames)
                                 let newNestBonus = 1.0;
                                 if (typeof sim !== 'undefined' && sim.tribes) {
@@ -11722,12 +12353,19 @@
                     // Same tribe SuperAgents can bond (for mating)
                 }
                 
-                // SuperAgents cannot bond with tethered agents
+                // SuperAgents and Group Agents cannot bond with tethered agents
+                // Tethered = Guardian or Soldier (nest-bound agents)
                 if (this.isSuperAgent && isPartnerTethered) {
                     return; // SuperAgents cannot bond with tethered agents
                 }
                 if (p.isSuperAgent && isThisTethered) {
                     return; // Tethered agents cannot bond with SuperAgents
+                }
+                if (this.isGroupEntity && isPartnerTethered) {
+                    return; // Group Agents cannot bond with tethered agents
+                }
+                if (p.isGroupEntity && isThisTethered) {
+                    return; // Tethered agents cannot bond with Group Agents
                 }
                 
                 // BUILDERS CANNOT BOND - They must focus only on building
@@ -12090,6 +12728,15 @@
                 let group = this.getCachedBondedGroup().filter(member => member && !member.dead);
                 if (group.length < CONFIG.groupAgentMinMembers || group.length > CONFIG.groupAgentMaxMembers) return;
                 if (group.some(member => member.isGroupEntity)) return;
+                
+                // FEATURE: Nest leaders cannot become group agents or superagents
+                let hasLeader = group.some(member => {
+                    if (member.tribeId !== -1 && sim.tribes && sim.tribes.tribes[member.tribeId]) {
+                        return sim.tribes.tribes[member.tribeId].leaderId === member.id;
+                    }
+                    return false;
+                });
+                if (hasLeader) return; // Cannot promote if any member is a nest leader
                 let avgStability = group.reduce((sum, member) => sum + member.structureStability, 0) / group.length;
                 if (avgStability < CONFIG.groupAgentStabilityThreshold) return;
                 // Check minimum group age - group must have existed for at least groupAgentMinAge frames
@@ -12847,9 +13494,13 @@
                 let sameHash = hash && hash === this.lastPartnerHash;
                 if (sameHash) {
                     let gain = withinPreferredBand ? CONFIG.structureStabilityInsideGain : CONFIG.structureStabilityOutsideGain;
+                    // FEATURE: Group entities gain stability much faster
+                    if (this.isGroupEntity) gain *= 3.0; // 3x faster gain (was 2.0x)
                     this.structureStability = Math.min(CONFIG.structureStabilityCap, this.structureStability + gain);
                 } else {
                     let decay = withinPreferredBand ? CONFIG.structureStabilityInsideDecay : CONFIG.structureStabilityOutsideDecay;
+                    // FEATURE: Group entities decay stability much slower (bonds last much longer)
+                    if (this.isGroupEntity) decay *= 0.1; // 10x slower decay (was 5x)
                     this.structureStability = Math.max(0, this.structureStability - decay);
                 }
                 this.structureBandActive = withinPreferredBand && groupSize > 1;
@@ -12870,27 +13521,61 @@
                     }
                 }
                 
-                if (!this.isGroupEntity && this.structureStability >= CONFIG.structureStabilityCap * 0.8 && groupSize === 5 && !nearNest) {
+                // FEATURE: Group entities can be 3, 5, or 7 members
+                let validGroupSizes = [3, 5, 7];
+                let isValidSize = validGroupSizes.includes(groupSize);
+                
+                if (!this.isGroupEntity && this.structureStability >= CONFIG.structureStabilityCap * 0.8 && isValidSize && !nearNest) {
                     this.isGroupEntity = true;
                     this.groupEntityMembers = group.map(a => a.id);
+                    
+                    // FEATURE: Convert all elastic bonds to rigid bonds for group entities
+                    // This makes the group more stable and cohesive
+                    group.forEach(member => {
+                        member.partners.forEach(partner => {
+                            // If this is an elastic bond (no rigid bond type set), make it rigid
+                            if (!member.rigidBonds[partner.id]) {
+                                member.rigidBonds[partner.id] = 'group'; // Mark as group rigid bond
+                            }
+                            if (!partner.rigidBonds[member.id]) {
+                                partner.rigidBonds[member.id] = 'group'; // Mark as group rigid bond
+                            }
+                        });
+                        
+                        // FEATURE: Increase mass and velocity for group entity members
+                        // This helps them escape and move better, like SuperAgents
+                        member.mass = (member.baseRadius * (member.health / 100)) * 5; // 5x heavier
+                        member.maxSpeed = member.baseSpeed * 1.8; // 1.8x faster
+                        member.maxForce = 0.3 * 2; // 2x stronger propulsion
+                    });
+                    
                     // Logging removed
                     // if (typeof sim !== 'undefined' && sim.debugPerformance) {
                     //     console.log(`🌟 GROUP ENTITY FORMED: Agent ${this.id} with ${groupSize} members, stability=${this.structureStability.toFixed(0)}`);
                     // }
                 }
                 
-                // If stability drops below 50% or group size != 5, revert to normal agent
-                if (this.isGroupEntity && (this.structureStability < CONFIG.structureStabilityCap * 0.5 || groupSize !== 5)) {
+                // If stability drops below 30% or group size not valid, revert to normal agent (was 50%)
+                // FEATURE: Group entities are much harder to dissolve
+                if (this.isGroupEntity && (this.structureStability < CONFIG.structureStabilityCap * 0.3 || !validGroupSizes.includes(groupSize))) {
                     this.isGroupEntity = false;
                     this.groupEntityMembers = [];
+                    
+                    // FEATURE: Reset mass and velocity when group dissolves
+                    group.forEach(member => {
+                        member.mass = member.baseRadius * (member.health / 100); // Normal mass
+                        member.maxSpeed = member.baseSpeed; // Normal speed
+                        member.maxForce = 0.3; // Normal force
+                    });
+                    
                     // Logging removed
                     // if (typeof sim !== 'undefined' && sim.debugPerformance) {
                     //     console.log(`💔 GROUP ENTITY DISSOLVED: Agent ${this.id}, stability=${this.structureStability.toFixed(0)}, size=${groupSize}`);
                     // }
                 }
                 
-                // FEATURE: Group entities must maintain exactly 5 members
-                // If size changes, the group entity status is already handled above (dissolution)
+                // FEATURE: Group entities can be 3, 5, or 7 members
+                // If size changes outside these values, the group entity status is already handled above (dissolution)
             }
             
             boundaries() {
@@ -13066,6 +13751,15 @@
                         // Draw full polygon when population is low
                         this.drawGroupPolygon(ctx);
                     }
+                    
+                    // FEATURE: Draw leader indicator (crown) for group leader
+                    if (this.groupLeader === this) {
+                        ctx.fillStyle = '#fbbf24'; // Gold color
+                        ctx.font = 'bold 12px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('★', 0, -this.radius - 8);
+                    }
                 } else if (this.isConverterUnit) {
                     this.drawConverterShape(ctx);
                 } else if (this.isConverterBonder) {
@@ -13075,7 +13769,17 @@
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
                 if (this.role === 'Monster') {
-                     ctx.rect(-this.radius, -this.radius, this.radius*2, this.radius*2);
+                    // Draw pentagon for monsters
+                    let sides = 5;
+                    let angle = (Math.PI * 2) / sides;
+                    ctx.moveTo(this.radius * Math.cos(0), this.radius * Math.sin(0));
+                    for (let i = 1; i <= sides; i++) {
+                        ctx.lineTo(
+                            this.radius * Math.cos(angle * i),
+                            this.radius * Math.sin(angle * i)
+                        );
+                    }
+                    ctx.closePath();
                 } else {
                      ctx.arc(0, 0, this.radius, 0, Math.PI*2);
                 }
@@ -13379,15 +14083,52 @@
                 }
             }
 
-            updateConfig(key, value) {
-                CONFIG[key] = parseFloat(value);
-                let valEl = document.getElementById(`val-${key}`);
-                if (valEl) valEl.textContent = CONFIG[key];
-            }
-
             restoreDefaults() {
                 CONFIG = { ...DEFAULT_CONFIG };
                 this.initSettings();
+            }
+            
+            replaceNestLeader(tribeId, nest) {
+                // FEATURE: Immediately replace nest leader when they die
+                if (!this.tribes || !this.tribes.tribes[tribeId] || !nest) return;
+                
+                // Find eligible agents (same tribe, not dead, not group/super agents, not tethered)
+                let eligibleAgents = this.agents.filter(a => 
+                    !a.dead && 
+                    a.tribeId === tribeId && 
+                    !a.isGroupEntity && 
+                    !a.isSuperAgent &&
+                    a.role !== 'Guardian' && 
+                    a.role !== 'Soldier' &&
+                    a.age > 100 // Must be mature
+                );
+                
+                if (eligibleAgents.length === 0) {
+                    // No eligible agents - spawn a new leader at the nest
+                    let leaderDNA = {
+                        size: 0.8 + Math.random() * 0.2,
+                        speed: 0.5 + Math.random() * 0.3,
+                        aggression: 0.6 + Math.random() * 0.3,
+                        sociability: 0.7 + Math.random() * 0.3,
+                        defending: 0.8 + Math.random() * 0.2
+                    };
+                    let newLeader = new Agent(nest.pos.x + (Math.random() * 40 - 20), nest.pos.y + (Math.random() * 40 - 20), leaderDNA, null, tribeId);
+                    newLeader.age = 150; // Start mature
+                    this.agents.push(newLeader);
+                    this.tribes.tribes[tribeId].leaderId = newLeader.id;
+                    this.setStatusMessage(`👑 New leader spawned for Tribe ${tribeId}`, 200);
+                } else {
+                    // Choose the strongest eligible agent
+                    let strongest = eligibleAgents.reduce((best, a) => {
+                        let strength = a.health + a.energy + (a.age * 0.1);
+                        let bestStrength = best.health + best.energy + (best.age * 0.1);
+                        return strength > bestStrength ? a : best;
+                    });
+                    
+                    this.tribes.tribes[tribeId].leaderId = strongest.id;
+                    this.setStatusMessage(`👑 ${strongest.role} promoted to leader of Tribe ${tribeId}`, 200);
+                    this.particles.push(new Particle(strongest.pos.x, strongest.pos.y, '#fbbf24', 'star'));
+                }
             }
 
             copySettingsToClipboard() {
@@ -14580,8 +15321,14 @@
                     if(document.getElementById('ins-health-status')) {
                         let status = "Healthy";
                         let color = "text-green-400";
-                        if(a.disease > 0) { status = "INFECTED"; color = "text-red-500"; }
-                        else if(a.immunity > 0) { status = "IMMUNE"; color = "text-blue-400"; }
+                        if(a.disease > 0) { 
+                            status = "INFECTED"; 
+                            color = "text-red-500"; 
+                        }
+                        else if(a.immunity > 0) { 
+                            status = "IMMUNE"; 
+                            color = "text-blue-400"; 
+                        }
                         
                         let el = document.getElementById('ins-health-status');
                         el.textContent = status;
@@ -14682,6 +15429,73 @@
                 if (sfx && sfx.backgroundGain && sfx.audioContext) {
                     const mainVolume = Math.max(0.4, CONFIG.sfxVolume) * 0.6;
                     sfx.backgroundGain.gain.setValueAtTime(mainVolume, sfx.audioContext.currentTime);
+                }
+            }
+            
+            updateConfig(key, value) {
+                // Update CONFIG value
+                let numValue = parseFloat(value);
+                CONFIG[key] = numValue;
+                
+                // Update display value
+                let displayEl = document.getElementById(`val-${key}`);
+                if (displayEl) {
+                    // Format display based on value type
+                    if (key.includes('Rate') && numValue < 1) {
+                        displayEl.textContent = numValue.toFixed(4);
+                    } else if (key.includes('Retain') || key.includes('Receive')) {
+                        displayEl.textContent = Math.round(numValue * 100) + '%';
+                    } else if (numValue < 1) {
+                        displayEl.textContent = numValue.toFixed(2);
+                    } else if (Number.isInteger(numValue)) {
+                        displayEl.textContent = Math.round(numValue);
+                    } else {
+                        displayEl.textContent = numValue.toFixed(1);
+                    }
+                }
+                
+                // Update input value to match
+                let inputEl = document.getElementById(`in-${key}`);
+                if (inputEl) {
+                    inputEl.value = numValue;
+                }
+                
+                console.log(`⚙️ CONFIG.${key} = ${numValue}`);
+            }
+            
+            toggleSettings() {
+                let modal = document.getElementById('settings-modal');
+                if (modal.classList.contains('hidden')) {
+                    modal.classList.remove('hidden');
+                    // Initialize all values when opening
+                    this.initializeSettingsValues();
+                } else {
+                    modal.classList.add('hidden');
+                }
+            }
+            
+            initializeSettingsValues() {
+                // Sync all settings displays with CONFIG values
+                for (let key in CONFIG) {
+                    let displayEl = document.getElementById(`val-${key}`);
+                    let inputEl = document.getElementById(`in-${key}`);
+                    if (displayEl && inputEl) {
+                        let value = CONFIG[key];
+                        inputEl.value = value;
+                        
+                        // Format display
+                        if (key.includes('Rate') && value < 1) {
+                            displayEl.textContent = value.toFixed(4);
+                        } else if (key.includes('Retain') || key.includes('Receive')) {
+                            displayEl.textContent = Math.round(value * 100) + '%';
+                        } else if (value < 1) {
+                            displayEl.textContent = value.toFixed(2);
+                        } else if (Number.isInteger(value)) {
+                            displayEl.textContent = Math.round(value);
+                        } else {
+                            displayEl.textContent = value.toFixed(1);
+                        }
+                    }
                 }
             }
 
@@ -15413,8 +16227,38 @@
                     this.recentBirths = this.recentBirths.filter(birth => this.frame - birth.frame < 180);
                 }
                 
-                // GRAZER CLEANUP: Remove dead grazers periodically to prevent accumulation
+                // COMPREHENSIVE CLEANUP: Remove dead agents and clean up after die-offs
                 if (this.frame % 300 === 0) { // Every 300 frames (5 seconds at 60fps)
+                    let deadCount = this.agents.filter(a => a.dead).length;
+                    let aliveCount = this.agents.length - deadCount;
+                    
+                    // If significant die-off (>20% dead), do comprehensive cleanup
+                    if (deadCount > aliveCount * 0.2 || deadCount > 50) {
+                        console.log(`🧹 CLEANUP: Removing ${deadCount} dead agents after die-off`);
+                        
+                        // Clean up dead agents' bonds and references
+                        for (let agent of this.agents) {
+                            if (agent.dead) {
+                                // Break all bonds
+                                if (agent.partners && agent.partners.length > 0) {
+                                    agent.breakAllBonds();
+                                }
+                                // Clear group entity status
+                                if (agent.isGroupEntity) {
+                                    agent.isGroupEntity = false;
+                                    agent.groupEntityMembers = [];
+                                }
+                            }
+                        }
+                        
+                        // Remove dead agents from array
+                        this.agents = this.agents.filter(a => !a.dead);
+                        
+                        // Force spatial grid rebuild after cleanup
+                        this._updateSpatialGrid();
+                    }
+                    
+                    // GRAZER CLEANUP: Remove dead grazers periodically to prevent accumulation
                     // PERFORMANCE: Lightweight grazer count check - only do expensive cleanup if needed
                     let grazerCount = 0;
                     for (let a of this.agents) {
@@ -15435,6 +16279,29 @@
                             let toRemove = grazerAges.slice(150);
                             for (let item of toRemove) {
                                 item.agent.dead = true; // Mark for removal, will be filtered in main loop
+                            }
+                        }
+                    }
+                    
+                    // GROUP AGENT CLEANUP: Clean up dissolved group entities
+                    let groupAgentCount = this.agents.filter(a => a.isGroupEntity && !a.dead).length;
+                    if (groupAgentCount > 0) {
+                        // Check for orphaned group entity members (group dissolved but flag still set)
+                        for (let agent of this.agents) {
+                            if (agent.isGroupEntity && !agent.dead) {
+                                let group = agent.getBondedGroup();
+                                let validGroupSizes = [3, 5, 7];
+                                // If group size is invalid, clean up the group entity status
+                                if (!validGroupSizes.includes(group.length)) {
+                                    for (let member of group) {
+                                        member.isGroupEntity = false;
+                                        member.groupEntityMembers = [];
+                                        // Reset mass and velocity to normal
+                                        member.mass = member.baseRadius * (member.health / 100);
+                                        member.maxSpeed = member.baseSpeed;
+                                        member.maxForce = 0.3;
+                                    }
+                                }
                             }
                         }
                     }
@@ -16829,8 +17696,11 @@
                 let minWorldY = Math.floor((viewTop - margin) / this.height);
                 let maxWorldY = Math.ceil((viewBottom + margin) / this.height);
                 
-                // FIX: When zoomed out enough to see entire world, only draw one copy
-                if (viewWidth >= this.width && viewHeight >= this.height) {
+                // FIX: When zoomed out enough to see entire world AND camera is centered, only draw one copy
+                // But if panning (camera not centered), we need wrapped copies even at 100% zoom
+                const isCameraCentered = Math.abs(this.cameraX - this.width / 2) < 10 && 
+                                        Math.abs(this.cameraY - this.height / 2) < 10;
+                if (viewWidth >= this.width && viewHeight >= this.height && isCameraCentered) {
                     minWorldX = 0;
                     maxWorldX = 0;
                     minWorldY = 0;
